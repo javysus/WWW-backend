@@ -38,6 +38,17 @@ type Ejemplar{
     libro: Libro
 }
 
+type Catalogo{
+    titulo: String
+    autor: String
+    edicion: String
+    anio: Int
+    tipo: String
+    categoria: String
+    ejemplares_disponibles: Int
+    ejemplares_sala: Int
+}
+
 input LibroInput{
     titulo: String!
     autor: String!
@@ -61,7 +72,7 @@ type Alert{
 type Query {
     getLibros: [Libro]
     getLibro(id: ID!): Libro 
-    getLibrosCatalogo(titulo: String, autor: String, categoria: String): [Libro]
+    getLibrosCatalogo(titulo: String, autor: String, categoria: String): [Catalogo]
     getEjemplares: [Ejemplar]
     getEjemplar(id: ID!): Ejemplar
 }
@@ -104,9 +115,9 @@ const resolvers = {
                 query.categoria = categoria;
             }
 
-            console.log(query);
+            //console.log(query);
 
-            let libros_dos = await Libro.aggregate([
+            const libros_dos = await Libro.aggregate([
                 {
                   "$match": /*{
                     "titulo": "Punk 57",
@@ -148,6 +159,7 @@ const resolvers = {
               ])
 
             console.log(libros_dos);
+            /*
             const libros = await Libro.find(query).populate('ejemplares');
 
             //console.log(libros);
@@ -161,11 +173,7 @@ const resolvers = {
                     }
                 }
                 console.log("Libros disponibles: ", disponibles)
-            }
-            //const count = await libros.ejemplares.find({"ejemplares.estado": "Disponible"});
-            //const ejemplares = await libros.find({"ejemplares.estado": "Disponible"});
-
-            
+            }*/
             return libros_dos;
         },
 
