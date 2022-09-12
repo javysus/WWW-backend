@@ -9,7 +9,8 @@ const libroSchema = new mongoose.Schema({
     categoria: String,
     tipo: String, //libro o multimedia
     subtipo: String,
-    ejemplares: [{type: mongoose.Schema.Types.ObjectId, ref:'Ejemplar'}]
+    ejemplares: [{type: mongoose.Schema.Types.ObjectId, ref:'Ejemplar'}],
+    solicitudes: [{type: mongoose.Schema.Types.ObjectId, ref:'Solicitud'}]
 })
 
 module.exports = mongoose.model('Libro', libroSchema);

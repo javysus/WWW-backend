@@ -12,12 +12,17 @@ const {ApolloServer, gql} = require("apollo-server-express");
 
 const{merge, filter} = require("lodash");
 
+const{GraphQLDateTime} = require("graphql-iso-date");
+
 const Ejemplar = require('./models/ejemplar');
 const Libro = require('./models/libro');
+const Solicitud = require('./models/solicitud')
 
 mongoose.connect('mongodb+srv://chocolovers:2605@clusterwww.frnk98m.mongodb.net/bec', {useNewUrlParser: true, useUnifiedTopology: true})
 
 const typeDefs = gql`
+scalar Date
+
 type Libro{
     id: ID!
     titulo: String!
@@ -29,6 +34,7 @@ type Libro{
     tipo: String!
     subtipo: String!
     ejemplares: [Ejemplar]
+    solicitudes: [Solicitud]
 }
 
 type Ejemplar{
@@ -39,14 +45,25 @@ type Ejemplar{
 }
 
 type Catalogo{
+    id_libro: ID!
     titulo: String
     autor: String
+    editorial: String
     edicion: String
     anio: Int
-    tipo: String
     categoria: String
+    tipo: String
+    subtipo: String
     ejemplares_disponibles: Int
     ejemplares_sala: Int
+}
+
+type Solicitud{
+    id: ID!
+    createdAt: Date
+    updatedAt: Date
+    estado_solicitud: Boolean
+    libro: Libro
 }
 
 input LibroInput{
@@ -65,6 +82,15 @@ input EjemplarInput{
     ubicacion: String
     libro: String
 }
+
+input SolicitudInput{
+    id_libro: String
+}
+
+input SolicitudActualizar{
+    estado_solicitud: Boolean
+}
+
 type Alert{
     message: String
 }
@@ -75,6 +101,9 @@ type Query {
     getLibrosCatalogo(titulo: String, autor: String, categoria: String): [Catalogo]
     getEjemplares: [Ejemplar]
     getEjemplar(id: ID!): Ejemplar
+    getSolicitudes: [Solicitud]
+    getSolicitud(id: ID!): Solicitud
+    getSolicitudEstado(estado_solicitud: Boolean): [Solicitud]
 }
 
 type Mutation {
@@ -84,17 +113,21 @@ type Mutation {
     addEjemplar(input: EjemplarInput): Ejemplar
     updateEjemplar(id: ID!, input: EjemplarInput): Ejemplar
     deleteEjemplar(id: ID!): Alert
+    addSolicitud(input: SolicitudInput): Solicitud
+    updateSolicitud(id: ID!, input: SolicitudActualizar): Solicitud
+    deleteSolicitud(id: ID!): Alert
 }`;
 
 const resolvers = {
+    Date: GraphQLDateTime,
     Query: {
         async getLibros(obj){
-            const libros = await Libro.find().populate('ejemplares');
+            const libros = await Libro.find();
             return libros;
         },
 
         async getLibro(obj, { id }){
-            const libro = await Libro.findById(id);
+            const libro = await Libro.findById(id).populate('ejemplares');
             return libro;
         },
 
@@ -140,11 +173,32 @@ const resolvers = {
                 {
                   "$group": {
                     "_id": "$_id",
+                    "id_libro": {
+                        "$first": "$_id"
+                      },
                     "titulo": {
                       "$first": "$titulo"
                     },
                     "autor": {
                       "$first": "$autor"
+                    },
+                    "editorial": {
+                        "$first": "$editorial"
+                    },
+                    "anio": {
+                        "$first": "$anio"
+                    },
+                    "edicion": {
+                        "$first": "$edicion"
+                    },
+                    "categoria": {
+                        "$first": "$categoria"
+                    },
+                    "tipo": {
+                        "$first": "$tipo"
+                    },
+                    "subtipo": {
+                        "$first": "$subtipo"
                     },
                     "ejemplares_disponibles": {
                       //"$sum": 1
@@ -159,21 +213,6 @@ const resolvers = {
               ])
 
             console.log(libros_dos);
-            /*
-            const libros = await Libro.find(query).populate('ejemplares');
-
-            //console.log(libros);
-            for (let libro in libros) {
-                console.log("libros largo: " , libros.length)
-                let disponibles = 0
-                //console.log(libros[libro].ejemplares[libro].estado)
-                for (let ejemplar in libros[libro].ejemplares){
-                    if (libros[libro].ejemplares[ejemplar].estado == "Disponible"){
-                        disponibles = disponibles + 1
-                    }
-                }
-                console.log("Libros disponibles: ", disponibles)
-            }*/
             return libros_dos;
         },
 
@@ -185,6 +224,24 @@ const resolvers = {
         async getEjemplares(obj){
             const ejemplares = await Ejemplar.find().populate('libro');
             return ejemplares;
+        },
+
+        async getSolicitudes(obj){
+            const solicitudes = await Solicitud.find();
+            return solicitudes;
+        },
+
+        async getSolicitud(obj, { id }){
+            const solicitud = await Solicitud.findById(id);
+            return solicitud;
+        },
+
+        async getSolicitudEstado(obj, { estado_solicitud }){
+            var query = {
+                "estado_solicitud": estado_solicitud
+            }
+            const solicitudes = await Solicitud.find(query);
+            return solicitudes;
         }
     },
 
@@ -209,14 +266,34 @@ const resolvers = {
             }
         },
 
+        async addSolicitud(obj, {input}){
+            let {id_libro} = input;
+            console.log(id_libro);
+            let libroFind = await Libro.findById(id_libro);
+            if(id_libro !== null){
+                const solicitud = new Solicitud({estado_solicitud: false, libro: libroFind._id})
+
+                await solicitud.save();
+
+                //Agregar referencia al libro
+                libroFind.solicitudes.push(solicitud._id);
+                await libroFind.save();
+                return solicitud;
+            }
+        },
         async updateLibro(obj, { id, input }){
-            const libro = await Libro.findByIdAndUpdate(id, input);
+            const libro = await Libro.findByIdAndUpdate(id, input,{new: true});
             return libro;
         },
 
         async updateEjemplar(obj, { id, input }){
-            const ejemplar = await Ejemplar.findByIdAndUpdate(id, input);
+            const ejemplar = await Ejemplar.findByIdAndUpdate(id, input,{new: true});
             return ejemplar;
+        },
+
+        async updateSolicitud(obj, { id, input}){
+            const solicitud = await Solicitud.findByIdAndUpdate(id, input, {new: true});
+            return solicitud;
         },
 
         async deleteLibro(obj, { id }){
@@ -230,6 +307,13 @@ const resolvers = {
             await Ejemplar.deleteOne({_id: id});
             return {
                 message: "Ejemplar eliminado"
+            }
+        },
+
+        async deleteSolicitud(obj, { id }){
+            await Solicitud.deleteOne({_id: id});
+            return {
+                message: "Solicitud eliminada"
             }
         }
     }
