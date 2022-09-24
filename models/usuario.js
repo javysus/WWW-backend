@@ -11,6 +11,7 @@ const usuarioSchema = new mongoose.Schema({
     activo: Boolean,
     foto: String,
     huella: [Boolean],
+    sancion: Date,
     prestamos: [{type: mongoose.Schema.Types.ObjectId, ref:'Prestamo'}],
     solicitudes: [{type: mongoose.Schema.Types.ObjectId, ref:'Solicitud'}]
 })

@@ -13,6 +13,7 @@ const {ApolloServer, gql} = require("apollo-server-express");
 const{merge, filter} = require("lodash");
 
 const{GraphQLDateTime} = require("graphql-iso-date");
+const schedule = require('node-schedule');
 
 const Ejemplar = require('./models/ejemplar');
 const Libro = require('./models/libro');
@@ -69,6 +70,7 @@ type Solicitud{
     updatedAt: Date
     estado_solicitud: Boolean
     libro: Libro!
+    ejemplar: Ejemplar!
     usuario: Usuario!
 }
 
@@ -84,10 +86,11 @@ type Prestamo{
 }
 
 type Vencido{
-    id: ID
+    id_prestamo: ID
     fecha_devolucion: Date
     lugar: String
     duration: Int
+    unit: String
 }
 
 type Usuario{
@@ -102,6 +105,7 @@ type Usuario{
     activo: Boolean!
     foto: String
     huella: [Boolean]
+    sancion: Date
     prestamos: [Prestamo]
     solicitudes: [Solicitud]
 }
@@ -201,11 +205,10 @@ input SolicitudInput{
 
 input SolicitudActualizar{
     estado_solicitud: Boolean
+    ejemplar: String
 }
 
 input PrestamoInput{
-    fecha_prestamo: Date!
-    fecha_devolucion: Date!
     lugar: String!
     ejemplar: String!
     usuario: String!
@@ -235,7 +238,7 @@ type Query {
     getBibliotecarios: [Bibliotecario]
     getBibliotecario(id: ID!): Bibliotecario
     getComprobante(fecha_prestamo: Date): [Prestamo]
-    getPrestamosVencidos(lugar: String): Vencido 
+    getPrestamosVencidos(lugar: String): [Vencido] 
 }
 
 type Mutation {
@@ -249,7 +252,7 @@ type Mutation {
     updateSolicitud(id: ID!, input: SolicitudActualizar): Solicitud
     deleteSolicitud(id: ID!): Alert
     addPrestamo(input: PrestamoInput): Prestamo
-    updatePrestamo(id: ID!, input: PrestamoActualizar): Prestamo
+    updatePrestamo(id: ID!): Prestamo
     deletePrestamo(id: ID!): Alert
     addUsuario(input: UsuarioInput): Usuario
     updateUsuario(id: ID!, input: UsuarioActualizar): Usuario
@@ -369,12 +372,12 @@ const resolvers = {
 
         async getSolicitudes(obj){
             const solicitudes = await Solicitud.find();
-            return solicitudes;
+            return solicitudes.populate('libro');
         },
 
         async getSolicitud(obj, { id }){
             const solicitud = await Solicitud.findById(id);
-            return solicitud;
+            return solicitud.populate('libro').populate('usuario');
         },
 
         async getSolicitudEstado(obj, { estado_solicitud }){
@@ -382,7 +385,7 @@ const resolvers = {
                 "estado_solicitud": estado_solicitud
             }
             const solicitudes = await Solicitud.find(query).sort({createdAt: -1});
-            return solicitudes;
+            return solicitudes.populate('libro');
         },
 
         async getUsuarios(obj){
@@ -413,8 +416,10 @@ const resolvers = {
         //Colocar diferencia
         async getPrestamosVencidos(obj, {lugar}){
             var unit = "day"
+            var unidad = "dias"
             if (lugar === "Sala"){
                 unit = "hour"
+                unidad = "horas"
             }
             var date = new Date();
             //const prestamos = await Prestamo.find({lugar: lugar, fecha_devolucion: {$lt: date}}).sort({fecha_devolucion: 'asc'}).populate('ejemplar');
@@ -422,7 +427,7 @@ const resolvers = {
                 "$match": {lugar: lugar, fecha_devolucion: {$lt: date}}
               },
                 {"$project": {
-                    _id: 1,
+                    id_prestamo: "$_id",
                     duration: /*{"$subtract": [date, "$fecha_devolucion"]}*/ {"$dateDiff":
                     {
                         startDate: "$fecha_devolucion",
@@ -430,7 +435,8 @@ const resolvers = {
                         unit: unit
                     }},
                     lugar: 1,
-                    fecha_devolucion: 1
+                    fecha_devolucion: 1,
+                    unit: unidad
                 }}])
             console.log(prestamos);
             return prestamos;
@@ -483,10 +489,39 @@ const resolvers = {
         },
 
         async addPrestamo(obj, {input}){
-            let {fecha_prestamo, fecha_devolucion, lugar, ejemplar, usuario, bibliotecario} = input;
+            let {lugar, ejemplar, usuario, bibliotecario} = input;
             let ejemplarFind = await Ejemplar.findById(ejemplar);
             let usuarioFind = await Usuario.findById(usuario);
             let bibliotecarioFind = await Bibliotecario.findById(bibliotecario);
+
+            let fecha_prestamo = new Date();
+            let fecha_devolucion = new Date(fecha_prestamo.getTime());
+           
+            let libroFind = await Libro.findById(ejemplarFind.libro);
+
+            let tipo = libroFind.tipo;
+
+            if(tipo === 'Libro'){
+                if (lugar === 'Casa'){
+                    fecha_devolucion.setDate(fecha_prestamo.getDate() + 15);
+                }
+
+                if (lugar === 'Sala Lectura'){
+                    let tiempoMillis = 5 * 60 * 60 * 1000; 
+                    fecha_devolucion.setTime(fecha_prestamo.getTime()+tiempoMillis);
+                }
+            }
+
+            if(tipo == 'Multimedia'){
+                if (lugar == 'Casa'){
+                    fecha_devolucion.setDate(fecha_prestamo.getDate() + 7)
+                }
+                
+                else if (lugar === 'Sala Multimedia'){
+                    let tiempoMillis = 3 * 60 * 60 * 1000; 
+                    fecha_devolucion.setTime(fecha_prestamo.getTime() + tiempoMillis)
+                }
+            }
 
             console.log(usuarioFind);
             if(ejemplar !== null){
@@ -534,18 +569,43 @@ const resolvers = {
         },
 
         async updateSolicitud(obj, { id, input}){
-            const solicitud = await Solicitud.findByIdAndUpdate(id, input, {new: true});
+            let {estado_solicitud, ejemplar} = input;
+
+            const ejemplarFind = await Ejemplar.findById(ejemplar._id);
+            const solicitud = await Solicitud.findByIdAndUpdate(id, {estado_solicitud: estado_solicitud, ejemplar: ejemplarFind._id}, {new: true});
+            await ejemplarFind.updateOne({estado: 'Reservado'});
             return solicitud;
         },
 
         //Asumimos que no se puede extender el plazo del prestamo
-        async updatePrestamo(obj, {id, input}){
-            const prestamo = await Prestamo.findByIdAndUpdate(id, input, {new: true});
+        async updatePrestamo(obj, {id}){
+            let fecha_devol_real = new Date();
+            const prestamo = await Prestamo.findByIdAndUpdate(id, {fecha_devol_real: fecha_devol_real}, {new: true});
 
             //Liberar ejemplar
             const ejemplar = await Ejemplar.findById(prestamo.ejemplar);
-            await ejemplar.updateOne({estado: 'Disponible', prestamo: null});
+            await ejemplar.updateOne({estado: 'Devuelto', prestamo: null});
 
+            let fecha_devolucion = prestamo.fecha_devolucion;
+
+            //Actualizar a disponible despues de 30 minutos
+            let fecha_actualizar = new Date(fecha_devol_real.getTime());
+            fecha_actualizar.setTime(fecha_actualizar.getTime()+(30*60*1000));
+            const job = schedule.scheduleJob(fecha_actualizar, async function(){
+                await ejemplar.updateOne({estado: 'Disponible'});
+            });
+
+            //Calcular sancion
+            var diff = (fecha_devol_real - fecha_devolucion);
+
+            //fecha_devolucion.setTime(fecha_prestamo.getTime()+tiempoMillis);
+            if (diff > 0){
+                let fecha_sancion = new Date(fecha_devol_real.getTime());
+                //Triplica
+                fecha_sancion.setTime(fecha_sancion.getTime()+(diff*3));
+                const usuario = await Usuario.findByIdAndUpdate(prestamo.usuario, {sancion: fecha_sancion}, {new: true});
+                
+            }
             return prestamo;
         },
         

@@ -4,6 +4,7 @@ const solicitudSchema = new mongoose.Schema({
     estado_solicitud: Boolean,
     fecha_reserva: Date,
     libro: {type: mongoose.Schema.Types.ObjectId, ref:'Libro'},
+    ejemplar: {type: mongoose.Schema.Types.ObjectId, ref:'Ejemplar'},
     usuario: {type: mongoose.Schema.Types.ObjectId, ref:'Usuario'}
 }, {timestamps: true})
 

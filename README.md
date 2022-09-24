@@ -1,5 +1,21 @@
 # WWW-backend
 Sistema de Préstamo en Biblioteca Municipal. Se utiliza NodeJS, GraphQL y Apollo Server
+
+## Pasos previos
+1. Instalar dependencias
+2. Cambiar credenciales de MongoDB en server.js
+3. Correr "npm start"
+4. Ir a localhost:8090/graphql
+
+## Duración de los prestamos
+* Libros en casa: 15 días
+* Libros en sala: 5 horas
+* Multimedia en casa: 7 días
+* Multimedia en sala: 3 horas
+
+## Sanciones
+La sanción del usuario en caso de devolución con atraso corresponde a ** el triple de tiempo del que se atrase **
+
 ## Libros
 
 ### getLibros
