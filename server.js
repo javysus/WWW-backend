@@ -19,6 +19,7 @@ const Libro = require('./models/libro');
 const Solicitud = require('./models/solicitud');
 const Prestamo = require('./models/prestamo');
 const Usuario = require('./models/usuario');
+const Bibliotecario = require('./models/bibliotecario');
 
 mongoose.connect('mongodb+srv://chocolovers:2605@clusterwww.frnk98m.mongodb.net/bec', {useNewUrlParser: true, useUnifiedTopology: true})
 
@@ -63,6 +64,7 @@ type Catalogo{
 
 type Solicitud{
     id: ID!
+    fecha_reserva: Date
     createdAt: Date
     updatedAt: Date
     estado_solicitud: Boolean
@@ -78,12 +80,21 @@ type Prestamo{
     lugar: String
     ejemplar: Ejemplar!
     usuario: Usuario!
+    bibliotecario: Bibliotecario!
+}
+
+type Vencido{
+    id: ID
+    fecha_devolucion: Date
+    lugar: String
+    duration: Int
 }
 
 type Usuario{
     id: ID!
     rut: String!
     nombre: String!
+    apellido: String!
     direccion: String!
     telefono: Int!
     correo: String!
@@ -95,14 +106,45 @@ type Usuario{
     solicitudes: [Solicitud]
 }
 
+type Bibliotecario{
+    id: ID!
+    rut: String!
+    nombre: String!
+    apellido: String!
+    correo: String!
+    contrasenia: String
+    foto: String
+    activo: Boolean!
+    prestamos: [Prestamo]
+}
+
+input BibliotecarioInput{
+    rut: String!
+    nombre: String!
+    apellido: String!
+    correo: String!
+    contrasenia: String
+    foto: String
+}
+
+input BibliotecarioActualizar{
+    rut: String
+    nombre: String
+    apellido: String
+    correo: String
+    contrasenia: String
+    foto: String
+    activo: Boolean
+}
+
 input UsuarioInput{
     rut: String!
     nombre: String!
+    apellido: String!
     direccion: String!
     telefono: Int!
     correo: String!
     contrasenia: String!
-    activo: Boolean!
     foto: String
     huella: [Boolean]
 }
@@ -110,6 +152,7 @@ input UsuarioInput{
 input UsuarioActualizar{
     rut: String
     nombre: String
+    apellido: String
     direccion: String
     telefono: Int
     correo: String
@@ -142,14 +185,18 @@ input LibroActualizar{
 }
 
 input EjemplarInput{
-    estado: String!
     ubicacion: String
-    libro: String
+    libro: String!
+}
+
+input EjemplarActualizar{
+    ubicacion: String
 }
 
 input SolicitudInput{
     id_libro: String!
     id_usuario: String!
+    fecha_reserva: Date!
 }
 
 input SolicitudActualizar{
@@ -162,6 +209,7 @@ input PrestamoInput{
     lugar: String!
     ejemplar: String!
     usuario: String!
+    bibliotecario: String!
 }
 
 input PrestamoActualizar{
@@ -184,6 +232,10 @@ type Query {
     getPrestamo(id: ID!): Prestamo
     getUsuarios: [Usuario]
     getUsuario(id: ID!): Usuario
+    getBibliotecarios: [Bibliotecario]
+    getBibliotecario(id: ID!): Bibliotecario
+    getComprobante(fecha_prestamo: Date): [Prestamo]
+    getPrestamosVencidos(lugar: String): Vencido 
 }
 
 type Mutation {
@@ -191,7 +243,7 @@ type Mutation {
     updateLibro(id: ID!, input: LibroActualizar): Libro
     deleteLibro(id: ID!): Alert
     addEjemplar(input: EjemplarInput): Ejemplar
-    updateEjemplar(id: ID!, input: EjemplarInput): Ejemplar
+    updateEjemplar(id: ID!, input: EjemplarActualizar): Ejemplar
     deleteEjemplar(id: ID!): Alert
     addSolicitud(input: SolicitudInput): Solicitud
     updateSolicitud(id: ID!, input: SolicitudActualizar): Solicitud
@@ -202,6 +254,9 @@ type Mutation {
     addUsuario(input: UsuarioInput): Usuario
     updateUsuario(id: ID!, input: UsuarioActualizar): Usuario
     deleteUsuario(id: ID!): Alert
+    addBibliotecario(input: BibliotecarioInput): Bibliotecario
+    updateBibliotecario(input: BibliotecarioActualizar): Bibliotecario
+    deleteBibliotecario(id: ID!): Alert
 }`;
 
 const resolvers = {
@@ -326,7 +381,7 @@ const resolvers = {
             var query = {
                 "estado_solicitud": estado_solicitud
             }
-            const solicitudes = await Solicitud.find(query);
+            const solicitudes = await Solicitud.find(query).sort({createdAt: -1});
             return solicitudes;
         },
 
@@ -339,38 +394,79 @@ const resolvers = {
             const usuario = await Usuario.findById(id).populate('prestamos').populate('solicitudes');
             return usuario;
         },
+
+        async getBibliotecarios(obj){
+            const usuarios = await Bibliotecario.find();
+            return usuarios;
+        },
+
+        async getBibliotecario(obj, { id }){
+            const usuario = await Bibliotecario.findById(id);
+            return usuario;
+        },
+
+        async getComprobante(obj, {fecha_prestamo}){
+            const comprobante = await Prestamo.find({fecha_prestamo: fecha_prestamo}).populate('ejemplar');
+            return comprobante;
+        },
+
+        //Colocar diferencia
+        async getPrestamosVencidos(obj, {lugar}){
+            var unit = "day"
+            if (lugar === "Sala"){
+                unit = "hour"
+            }
+            var date = new Date();
+            //const prestamos = await Prestamo.find({lugar: lugar, fecha_devolucion: {$lt: date}}).sort({fecha_devolucion: 'asc'}).populate('ejemplar');
+            const prestamos = await Prestamo.aggregate([{
+                "$match": {lugar: lugar, fecha_devolucion: {$lt: date}}
+              },
+                {"$project": {
+                    _id: 1,
+                    duration: /*{"$subtract": [date, "$fecha_devolucion"]}*/ {"$dateDiff":
+                    {
+                        startDate: "$fecha_devolucion",
+                        endDate: date,
+                        unit: unit
+                    }},
+                    lugar: 1,
+                    fecha_devolucion: 1
+                }}])
+            console.log(prestamos);
+            return prestamos;
+        }
     },
 
     Mutation: {
         async addLibro(obj, { input }){
+            console.log(input);
             const libro = new Libro(input);
             await libro.save();
             return libro;
         },
 
         async addEjemplar(obj, { input }){
-            let {estado, ubicacion, libro} = input;
+            let {ubicacion, libro} = input;
             let libroFind = await Libro.findById(libro);
             if(libro !== null){
-                const ejemplar = new Ejemplar({estado: estado, ubicacion: ubicacion, libro: libroFind._id})
-                await ejemplar.save();
+                const ejemplar = new Ejemplar({estado: 'Disponible', ubicacion: ubicacion, libro: libroFind._id})
 
                 //Agregar referencia al libro
                 libroFind.ejemplares.push(ejemplar._id);
                 await libroFind.save();
+
+                await ejemplar.save();
                 return ejemplar; //Agregar .populate('libro') si queremos mostrar datos del libro 
             }
         },
 
         async addSolicitud(obj, {input}){
-            let {id_libro, id_usuario} = input;
+            let {id_libro, id_usuario, fecha_reserva} = input;
             console.log(id_libro);
             let libroFind = await Libro.findById(id_libro);
             let usuarioFind = await Usuario.findById(id_usuario);
             if(id_libro !== null){
-                const solicitud = new Solicitud({estado_solicitud: false, libro: libroFind._id})
-
-                await solicitud.save();
+                const solicitud = new Solicitud({estado_solicitud: false, fecha_reserva: fecha_reserva, libro: libroFind._id})
 
                 //Agregar referencia al libro
                 libroFind.solicitudes.push(solicitud._id);
@@ -380,35 +476,51 @@ const resolvers = {
                 usuarioFind.solicitudes.push(solicitud._id);
                 await usuarioFind.save();
 
+                await solicitud.save();
+
                 return solicitud;
             }
         },
 
         async addPrestamo(obj, {input}){
-            let {fecha_prestamo, fecha_devolucion, lugar, ejemplar, usuario} = input;
+            let {fecha_prestamo, fecha_devolucion, lugar, ejemplar, usuario, bibliotecario} = input;
             let ejemplarFind = await Ejemplar.findById(ejemplar);
             let usuarioFind = await Usuario.findById(usuario);
+            let bibliotecarioFind = await Bibliotecario.findById(bibliotecario);
 
+            console.log(usuarioFind);
             if(ejemplar !== null){
-                const prestamo = new Prestamo({fecha_prestamo: fecha_prestamo, fecha_devolucion: fecha_devolucion, lugar: lugar, ejemplar: ejemplarFind._id, usuario: usuarioFind._id})
-
-                await prestamo.save();
+                const prestamo = new Prestamo({fecha_prestamo: fecha_prestamo, fecha_devolucion: fecha_devolucion, lugar: lugar, ejemplar: ejemplarFind._id, usuario: usuarioFind._id, bibliotecario: bibliotecarioFind._id})
 
                 //Agregar referencia al libro
-                await ejemplarFind.updateOne({prestamo: prestamo._id});
+                await ejemplarFind.updateOne({prestamo: prestamo._id, estado: lugar});
 
                 //Agregar referencia a usuario
                 usuarioFind.prestamos.push(prestamo._id);
                 await usuarioFind.save();
+
+                //Agregar referencia a bibliotecario
+                bibliotecarioFind.prestamos.push(prestamo._id);
+                await bibliotecarioFind.save();
+
+                await prestamo.save();
 
                 return prestamo;
             }
         },
 
         async addUsuario(obj, {input}){
-            const usuario = new Usuario(input);
+            let {rut, nombre, apellido, direccion, telefono, correo, contrasenia, foto, huella} = input;
+            const usuario = new Usuario({rut: rut, nombre: nombre, apellido: apellido, direccion: direccion, telefono: telefono, correo: correo, contrasenia: contrasenia, foto: foto, huella: huella, activo: false});
             await usuario.save();
             return usuario;
+        },
+
+        async addBibliotecario(obj, {input}){
+            let {rut, nombre, apellido, correo, contrasenia, foto} = input;
+            const bibliotecario = new Bibliotecario({rut: rut, nombre: nombre, apellido: apellido, correo: correo, contrasenia: contrasenia, foto: foto, activo: true});
+            await bibliotecario.save();
+            return bibliotecario
         },
 
         async updateLibro(obj, { id, input }){
@@ -432,7 +544,7 @@ const resolvers = {
 
             //Liberar ejemplar
             const ejemplar = await Ejemplar.findById(prestamo.ejemplar);
-            await ejemplar.updateOne({prestamo: null});
+            await ejemplar.updateOne({estado: 'Disponible', prestamo: null});
 
             return prestamo;
         },
@@ -442,6 +554,10 @@ const resolvers = {
             return usuario;
         },
 
+        async updateBibliotecario(obj, { id, input}){
+            const bibliotecario = await Bibliotecario.findByIdAndUpdate(id, input, {new:true});
+            return bibliotecario;
+        },
 
         async deleteLibro(obj, { id }){
             await Libro.deleteOne({_id: id});
@@ -453,12 +569,13 @@ const resolvers = {
         async deleteEjemplar(obj, { id }){
             const ejemplar = await Ejemplar.findById(id);
             const libroFind = await Libro.findById(ejemplar.libro);
-            //Eliminar ejemplar
-            await Ejemplar.deleteOne(ejemplar);
 
             //Eliminar ejemplar del libro
             libroFind.ejemplares.pop(ejemplar._id);
             await libroFind.save();
+
+            //Eliminar ejemplar
+            await Ejemplar.deleteOne(ejemplar);
             return {
                 message: "Ejemplar eliminado"
             }
@@ -469,13 +586,15 @@ const resolvers = {
             const libroFind = await Solicitud.findById(solicitud.libro);
             const usuarioFind = await Usuario.findById(solicitud.usuario);
 
-            await Solicitud.deleteOne(solicitud);
-
             usuarioFind.solicitudes.pop(solicitud._id);
             libroFind.solicitudes.pop(solicitud._id);
 
             await usuarioFind.save();
             await libroFind.save();
+
+            
+            await Solicitud.deleteOne(solicitud);
+
             
             return {
                 message: "Solicitud eliminada"
@@ -486,11 +605,17 @@ const resolvers = {
             const prestamo = await Prestamo.findById(id);
             const ejemplarFind = await Ejemplar.findById(prestamo.ejemplar);
             const usuarioFind = await Usuario.findById(prestamo.usuario);
+            const bibliotecarioFind = await Bibliotecario.findById(prestamo.bibliotecario);
 
-            await Prestamo.deleteOne(prestamo);
-            await ejemplarFind.updateOne({prestamo: null});
             usuarioFind.prestamos.pop(prestamo._id);
+            bibliotecarioFind.prestamos.pop(prestamo._id);
+
             await usuarioFind.save();
+            await bibliotecarioFind.save();
+            await ejemplarFind.updateOne({prestamo: null});
+            
+            
+            await Prestamo.deleteOne(prestamo);
             
             return {
                 message: "Prestamo eliminado"
@@ -498,9 +623,39 @@ const resolvers = {
         },
 
         async deleteUsuario(obj, { id }){
+            const usuario = await Usuario.findById(id);
+            //const prestamosFind = await Prestamo.findById(usuario.prestamos);
+            //const solicitudesFind = await Solicitud.findById(usuario.solicitudes);
+            //console.log(prestamosFind);
+            for (const i in usuario.prestamos){
+                //console.log(i);
+                let prestamo = await Prestamo.findById(usuario.prestamos[i]);
+                await prestamo.updateOne({usuario: null});
+            }
+
+            for (const i in usuarios.solicitudes){
+                let solicitud = await Solicitud.findById(usuario.solicitudes[i]);
+                await solicitud.updateOne({usuario: null});
+            }
+
             await Usuario.deleteOne({_id: id});
             return {
-                message: "Solicitud eliminada"
+                message: "Usuario eliminado"
+            }
+        },
+
+        async deleteBibliotecario(obj, { id }){
+            const bibliotecario = await Bibliotecario.findById(id);
+    
+            for (const i in bibliotecario.prestamos){
+                //console.log(i);
+                let prestamo = await Prestamo.findById(bibliotecario.prestamos[i]);
+                await prestamo.updateOne({bibliotecario: null});
+            }
+
+            await Bibliotecario.deleteOne({_id: id});
+            return {
+                message: "Bibliotecario eliminado"
             }
         }
     }

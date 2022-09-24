@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const solicitudSchema = new mongoose.Schema({
     estado_solicitud: Boolean,
+    fecha_reserva: Date,
     libro: {type: mongoose.Schema.Types.ObjectId, ref:'Libro'},
     usuario: {type: mongoose.Schema.Types.ObjectId, ref:'Usuario'}
 }, {timestamps: true})
