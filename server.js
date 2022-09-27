@@ -209,6 +209,7 @@ input SolicitudActualizar{
 }
 
 input PrestamoInput{
+    fecha_prestamo: Date!
     lugar: String!
     ejemplar: String!
     usuario: String!
@@ -291,8 +292,6 @@ const resolvers = {
             if (categoria){
                 query.categoria = categoria;
             }
-
-            //console.log(query);
 
             const libros_dos = await Libro.aggregate([
                 {
@@ -417,7 +416,7 @@ const resolvers = {
         async getPrestamosVencidos(obj, {lugar}){
             var unit = "day"
             var unidad = "dias"
-            if (lugar === "Sala"){
+            if (lugar === "Sala Lectura" || lugar === "Sala Multimedia"){
                 unit = "hour"
                 unidad = "horas"
             }
@@ -454,7 +453,7 @@ const resolvers = {
         async addEjemplar(obj, { input }){
             let {ubicacion, libro} = input;
             let libroFind = await Libro.findById(libro);
-            if(libro !== null){
+            if(libroFind !== null){
                 const ejemplar = new Ejemplar({estado: 'Disponible', ubicacion: ubicacion, libro: libroFind._id})
 
                 //Agregar referencia al libro
@@ -471,7 +470,7 @@ const resolvers = {
             console.log(id_libro);
             let libroFind = await Libro.findById(id_libro);
             let usuarioFind = await Usuario.findById(id_usuario);
-            if(id_libro !== null){
+            if(libroFind !== null && usuarioFind !== null){
                 const solicitud = new Solicitud({estado_solicitud: false, fecha_reserva: fecha_reserva, libro: libroFind._id})
 
                 //Agregar referencia al libro
@@ -489,12 +488,11 @@ const resolvers = {
         },
 
         async addPrestamo(obj, {input}){
-            let {lugar, ejemplar, usuario, bibliotecario} = input;
+            let {fecha_prestamo, lugar, ejemplar, usuario, bibliotecario} = input;
             let ejemplarFind = await Ejemplar.findById(ejemplar);
             let usuarioFind = await Usuario.findById(usuario);
             let bibliotecarioFind = await Bibliotecario.findById(bibliotecario);
 
-            let fecha_prestamo = new Date();
             let fecha_devolucion = new Date(fecha_prestamo.getTime());
            
             let libroFind = await Libro.findById(ejemplarFind.libro);
@@ -523,8 +521,7 @@ const resolvers = {
                 }
             }
 
-            console.log(usuarioFind);
-            if(ejemplar !== null){
+            if(ejemplarFind !== null && usuarioFind !== null && bibliotecarioFind !== null){
                 const prestamo = new Prestamo({fecha_prestamo: fecha_prestamo, fecha_devolucion: fecha_devolucion, lugar: lugar, ejemplar: ejemplarFind._id, usuario: usuarioFind._id, bibliotecario: bibliotecarioFind._id})
 
                 //Agregar referencia al libro
@@ -571,10 +568,16 @@ const resolvers = {
         async updateSolicitud(obj, { id, input}){
             let {estado_solicitud, ejemplar} = input;
 
-            const ejemplarFind = await Ejemplar.findById(ejemplar._id);
-            const solicitud = await Solicitud.findByIdAndUpdate(id, {estado_solicitud: estado_solicitud, ejemplar: ejemplarFind._id}, {new: true});
-            await ejemplarFind.updateOne({estado: 'Reservado'});
-            return solicitud;
+            const ejemplarFind = await Ejemplar.findById(ejemplar);
+
+            if(ejemplarFind !== null){
+                const solicitud = await Solicitud.findByIdAndUpdate(id, {estado_solicitud: estado_solicitud, ejemplar: ejemplarFind._id}, {new: true});
+                await ejemplarFind.updateOne({estado: 'Reservado'});
+
+                return solicitud;
+            }
+            
+            
         },
 
         //Asumimos que no se puede extender el plazo del prestamo
@@ -631,13 +634,19 @@ const resolvers = {
             const libroFind = await Libro.findById(ejemplar.libro);
 
             //Eliminar ejemplar del libro
-            libroFind.ejemplares.pop(ejemplar._id);
-            await libroFind.save();
+            if(libroFind !== null){
+                libroFind.ejemplares.pop(ejemplar._id);
+                await libroFind.save();
 
-            //Eliminar ejemplar
-            await Ejemplar.deleteOne(ejemplar);
-            return {
-                message: "Ejemplar eliminado"
+                //Eliminar ejemplar
+                await Ejemplar.deleteOne(ejemplar);
+                return {
+                    message: "Ejemplar eliminado"
+                }
+            } else{
+                return {
+                    message: "Ingrese ejemplar y libro validos"
+                }
             }
         },
 
@@ -646,18 +655,24 @@ const resolvers = {
             const libroFind = await Solicitud.findById(solicitud.libro);
             const usuarioFind = await Usuario.findById(solicitud.usuario);
 
-            usuarioFind.solicitudes.pop(solicitud._id);
-            libroFind.solicitudes.pop(solicitud._id);
+            if(libroFind !== null && usuarioFind !== null){
+                usuarioFind.solicitudes.pop(solicitud._id);
+                libroFind.solicitudes.pop(solicitud._id);
 
-            await usuarioFind.save();
-            await libroFind.save();
+                await usuarioFind.save();
+                await libroFind.save();
 
-            
-            await Solicitud.deleteOne(solicitud);
+                
+                await Solicitud.deleteOne(solicitud);
 
-            
-            return {
-                message: "Solicitud eliminada"
+                
+                return {
+                    message: "Solicitud eliminada"
+                }
+            } else{
+                return {
+                    message: "Ingrese libro y usuario validos"
+                }
             }
         },
 
@@ -667,18 +682,24 @@ const resolvers = {
             const usuarioFind = await Usuario.findById(prestamo.usuario);
             const bibliotecarioFind = await Bibliotecario.findById(prestamo.bibliotecario);
 
-            usuarioFind.prestamos.pop(prestamo._id);
-            bibliotecarioFind.prestamos.pop(prestamo._id);
+            if (ejemplarFind !== null && usuarioFind !== null && bibliotecarioFind !== null){
+                usuarioFind.prestamos.pop(prestamo._id);
+                bibliotecarioFind.prestamos.pop(prestamo._id);
 
-            await usuarioFind.save();
-            await bibliotecarioFind.save();
-            await ejemplarFind.updateOne({prestamo: null});
-            
-            
-            await Prestamo.deleteOne(prestamo);
-            
-            return {
-                message: "Prestamo eliminado"
+                await usuarioFind.save();
+                await bibliotecarioFind.save();
+                await ejemplarFind.updateOne({prestamo: null});
+                
+                
+                await Prestamo.deleteOne(prestamo);
+                
+                return {
+                    message: "Prestamo eliminado"
+                }
+            } else {
+                return {
+                    message: "Ingrese ejemplar, usuario y bibliotecario validos"
+                }
             }
         },
 
@@ -687,36 +708,53 @@ const resolvers = {
             //const prestamosFind = await Prestamo.findById(usuario.prestamos);
             //const solicitudesFind = await Solicitud.findById(usuario.solicitudes);
             //console.log(prestamosFind);
-            for (const i in usuario.prestamos){
-                //console.log(i);
-                let prestamo = await Prestamo.findById(usuario.prestamos[i]);
-                await prestamo.updateOne({usuario: null});
-            }
 
-            for (const i in usuarios.solicitudes){
-                let solicitud = await Solicitud.findById(usuario.solicitudes[i]);
-                await solicitud.updateOne({usuario: null});
+            if (usuario !== null){
+                for (const i in usuario.prestamos){
+                    //console.log(i);
+                    let prestamo = await Prestamo.findById(usuario.prestamos[i]);
+                    await prestamo.updateOne({usuario: null});
+                }
+    
+                for (const i in usuarios.solicitudes){
+                    let solicitud = await Solicitud.findById(usuario.solicitudes[i]);
+                    await solicitud.updateOne({usuario: null});
+                }
+    
+                await Usuario.deleteOne({_id: id});
+                return {
+                    message: "Usuario eliminado"
+                }
             }
-
-            await Usuario.deleteOne({_id: id});
-            return {
-                message: "Usuario eliminado"
+            else{
+                return {
+                    message: "Ingrese usuario valido"
+                }
             }
+            
         },
 
         async deleteBibliotecario(obj, { id }){
             const bibliotecario = await Bibliotecario.findById(id);
+            
+            if (bibliotecario !== null){
+                for (const i in bibliotecario.prestamos){
+                    //console.log(i);
+                    let prestamo = await Prestamo.findById(bibliotecario.prestamos[i]);
+                    await prestamo.updateOne({bibliotecario: null});
+                }
     
-            for (const i in bibliotecario.prestamos){
-                //console.log(i);
-                let prestamo = await Prestamo.findById(bibliotecario.prestamos[i]);
-                await prestamo.updateOne({bibliotecario: null});
+                await Bibliotecario.deleteOne({_id: id});
+                return {
+                    message: "Bibliotecario eliminado"
+                }
             }
-
-            await Bibliotecario.deleteOne({_id: id});
-            return {
-                message: "Bibliotecario eliminado"
+            else{
+                return {
+                    message: "Ingrese bibliotecario valido"
+                }
             }
+            
         }
     }
 }
