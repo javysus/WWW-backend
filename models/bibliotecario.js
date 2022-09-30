@@ -9,6 +9,7 @@ const bibliotecarioSchema = new mongoose.Schema({
     foto: String,
     activo: Boolean,
     prestamos: [{type: mongoose.Schema.Types.ObjectId, ref:'Prestamo'}],
+    comprobantes: [{type: mongoose.Schema.Types.ObjectId, ref:'Comprobante'}]
 })
 
 module.exports = mongoose.model('Bibliotecario', bibliotecarioSchema);

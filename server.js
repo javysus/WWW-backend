@@ -21,6 +21,8 @@ const Solicitud = require('./models/solicitud');
 const Prestamo = require('./models/prestamo');
 const Usuario = require('./models/usuario');
 const Bibliotecario = require('./models/bibliotecario');
+const Comprobante = require('./models/comprobante');
+const usuario = require("./models/usuario");
 
 mongoose.connect('mongodb+srv://chocolovers:2605@clusterwww.frnk98m.mongodb.net/bec', {useNewUrlParser: true, useUnifiedTopology: true})
 
@@ -65,13 +67,21 @@ type Catalogo{
 
 type Solicitud{
     id: ID!
-    fecha_reserva: Date
+    fecha_reserva: Date!
     createdAt: Date
     updatedAt: Date
     estado_solicitud: Boolean
     libro: Libro!
     ejemplar: Ejemplar!
     usuario: Usuario!
+}
+
+type Comprobante{
+    id: ID!
+    fecha_prestamo: Date!
+    usuario: Usuario!
+    bibliotecario: Bibliotecario!
+    prestamos: [Prestamo]
 }
 
 type Prestamo{
@@ -83,6 +93,7 @@ type Prestamo{
     ejemplar: Ejemplar!
     usuario: Usuario!
     bibliotecario: Bibliotecario!
+    comprobante: Comprobante
 }
 
 type Vencido{
@@ -108,6 +119,7 @@ type Usuario{
     sancion: Date
     prestamos: [Prestamo]
     solicitudes: [Solicitud]
+    comprobantes: [Comprobante]
 }
 
 type Bibliotecario{
@@ -120,6 +132,7 @@ type Bibliotecario{
     foto: String
     activo: Boolean!
     prestamos: [Prestamo]
+    comprobantes: [Comprobante]
 }
 
 input BibliotecarioInput{
@@ -214,11 +227,19 @@ input PrestamoInput{
     ejemplar: String!
     usuario: String!
     bibliotecario: String!
+    comprobante: String
 }
 
 input PrestamoActualizar{
     fecha_devol_real: Date
 }
+
+input ComprobanteInput{
+    fecha_prestamo: Date!
+    usuario: String!
+    bibliotecario: String!
+}
+
 type Alert{
     message: String
 }
@@ -238,8 +259,15 @@ type Query {
     getUsuario(id: ID!): Usuario
     getBibliotecarios: [Bibliotecario]
     getBibliotecario(id: ID!): Bibliotecario
-    getComprobante(fecha_prestamo: Date): [Prestamo]
-    getPrestamosVencidos(lugar: String): [Vencido] 
+    getComprobante(id: ID!): Comprobante
+    getComprobantesByUsuario(usuario: String): [Comprobante]
+    getComprobantesByBibliotecario(bibliotecario: String): [Comprobante]
+    getPrestamosVencidos(lugar: String): [Vencido]
+    getPrestamosByUsuario(usuario: String): [Prestamo]
+    getPrestamosByBibliotecario(bibliotecario: String): [Prestamo]
+    ValidacionUsuario(correo: String, constrasenia: String): Boolean
+    ValidacionBibliotecario(correo: String, constrasenia: String): Boolean
+    ValidacionRutUsuario(rut: String, huella: [Boolean]): Boolean
 }
 
 type Mutation {
@@ -261,6 +289,8 @@ type Mutation {
     addBibliotecario(input: BibliotecarioInput): Bibliotecario
     updateBibliotecario(input: BibliotecarioActualizar): Bibliotecario
     deleteBibliotecario(id: ID!): Alert
+    addComprobante(input: ComprobanteInput): Comprobante
+    deleteComprobante(id: ID!): Alert
 }`;
 
 const resolvers = {
@@ -282,11 +312,11 @@ const resolvers = {
             };
 
             if (titulo){
-                query.titulo = {$regex: '.*'+titulo+'.*'};
+                query.titulo = {$regex: '.*'+titulo+'.*', $options:'i'};
             }
 
             if (autor){
-                query.autor = {$regex: '.*'+autor+'.*'};
+                query.autor = {$regex: '.*'+autor+'.*', $options:'i'};
             }
 
             if (categoria){
@@ -383,8 +413,8 @@ const resolvers = {
             var query = {
                 "estado_solicitud": estado_solicitud
             }
-            const solicitudes = await Solicitud.find(query).sort({createdAt: -1});
-            return solicitudes.populate('libro');
+            const solicitudes = await Solicitud.find(query).sort({createdAt: -1}).populate('libro');
+            return solicitudes;
         },
 
         async getUsuarios(obj){
@@ -407,18 +437,61 @@ const resolvers = {
             return usuario;
         },
 
-        async getComprobante(obj, {fecha_prestamo}){
-            const comprobante = await Prestamo.find({fecha_prestamo: fecha_prestamo}).populate('ejemplar');
+        async getComprobante(obj, {id}){
+            const comprobante = await Comprobante.findById(id).populate('usuario').populate('bibliotecario').populate('prestamos').populate({path: 'prestamos', populate: { path: 'ejemplar' }}).populate({path: 'prestamos', populate: { path: 'ejemplar' , populate: {path: 'libro'}}});
+            console.log(comprobante);
             return comprobante;
+        },
+
+        async getComprobantesByUsuario(obj, {usuario}){
+            const comprobante = await Comprobante.find({usuario: usuario}).populate('prestamos');
+            return comprobante;
+        },
+
+        async getComprobantesByBibliotecario(obj, {bibliotecario}){
+            const comprobante = await Comprobante.find({bibliotecario: bibliotecario}).populate('prestamos');
+            return comprobante;
+        },
+
+        async getPrestamos(obj){
+            const prestamos = await Prestamos.find();
+            return prestamos;
+        },
+
+        async getPrestamo(obj, { id }){
+            const prestamo = await Prestamo.findById(id).populate('ejemplar').populate('usuario').populate('bibliotecario');
+            return prestamo;
+        },
+
+        async getBibliotecarios(obj){
+            const usuarios = await Bibliotecario.find();
+            return usuarios;
+        },
+
+        async getPrestamosByUsuario(obj, {usuario}){
+            const prestamo = await Prestamo.find({usuario: usuario}).populate('ejemplar').populate('bibliotecario');
+            return prestamo;
+        },
+
+        async getPrestamosByBibliotecario(obj, {bibliotecario}){
+            const prestamo = await Prestamo.find({bibliotecario: bibliotecario}).populate('ejemplar').populate('usuario');
+            return prestamo;
         },
 
         //Colocar diferencia
         async getPrestamosVencidos(obj, {lugar}){
-            var unit = "day"
-            var unidad = "dias"
+            var unit;
+            var unidad;
             if (lugar === "Sala Lectura" || lugar === "Sala Multimedia"){
                 unit = "hour"
                 unidad = "horas"
+            }
+            else if (lugar === 'Casa'){
+                unit = "day"
+                unidad = "dias"
+            } else{
+                console.log('Ingrese lugar válido');
+                return null
             }
             var date = new Date();
             //const prestamos = await Prestamo.find({lugar: lugar, fecha_devolucion: {$lt: date}}).sort({fecha_devolucion: 'asc'}).populate('ejemplar');
@@ -438,8 +511,53 @@ const resolvers = {
                     unit: unidad
                 }}])
             console.log(prestamos);
-            return prestamos;
-        }
+            return prestamos; //Para ver el contacto del usuario
+        },
+        async ValidacionUsuario(obj, {correo, contrasenia}){
+            const cuenta = await Usuario.find(correo);
+            if (cuenta !== null){
+                if (contrasenia === cuenta.contrasenia){
+                    return True;
+                }
+                else{
+                    console.log("Contraseña incorrecta.")
+                    return False;
+                }
+            } else{
+                console.log("No se encontró un usuario con este correo.")
+                return null;
+            }
+        },
+        async ValidacionBibliotecario(obj, {correo, contrasenia}){
+            const cuenta = await Bibliotecario.find({correo: correo});
+            if (cuenta !== null){
+                if (contrasenia === cuenta.contrasenia){
+                    return True;
+                }
+                else{
+                    console.log("Contraseña incorrecta.")
+                    return False;
+                }
+            } else{
+                console.log("No se encontró un bibliotecario con este correo.")
+                return null;
+            }
+        },
+        async ValidacionRutUsuario(obj, {rut, huella}){
+            const cuenta = await Usuario.find({rut: rut});
+            if (cuenta !== null){
+                if (huella === cuenta.huella){
+                    return True;
+                }
+                else{
+                    console.log("Vuelva a colocar su huella.")
+                    return False;
+                }
+            } else{
+                console.log("No se encontró un bibliotecario con este rut.")
+                return null;
+            }
+        },
     },
 
     Mutation: {
@@ -462,6 +580,9 @@ const resolvers = {
 
                 await ejemplar.save();
                 return ejemplar; //Agregar .populate('libro') si queremos mostrar datos del libro 
+            } else{
+                console.log("Ingrese un ejemplar válido")
+                return null;
             }
         },
 
@@ -484,14 +605,18 @@ const resolvers = {
                 await solicitud.save();
 
                 return solicitud;
+            } else{
+                console.log("Ingrese un libro y/o usuario válido")
+                return null;
             }
         },
 
         async addPrestamo(obj, {input}){
-            let {fecha_prestamo, lugar, ejemplar, usuario, bibliotecario} = input;
+            let {fecha_prestamo, lugar, ejemplar, usuario, bibliotecario, comprobante} = input;
             let ejemplarFind = await Ejemplar.findById(ejemplar);
             let usuarioFind = await Usuario.findById(usuario);
             let bibliotecarioFind = await Bibliotecario.findById(bibliotecario);
+            let comprobanteFind = await Comprobante.findById(comprobante);
 
             let fecha_devolucion = new Date(fecha_prestamo.getTime());
            
@@ -504,13 +629,18 @@ const resolvers = {
                     fecha_devolucion.setDate(fecha_prestamo.getDate() + 15);
                 }
 
-                if (lugar === 'Sala Lectura'){
+                else if (lugar === 'Sala Lectura'){
                     let tiempoMillis = 5 * 60 * 60 * 1000; 
                     fecha_devolucion.setTime(fecha_prestamo.getTime()+tiempoMillis);
                 }
+
+                else{
+                    console.log("Ingrese lugar de préstamo correcto");
+                    return null;
+                }
             }
 
-            if(tipo == 'Multimedia'){
+            else if(tipo == 'Multimedia'){
                 if (lugar == 'Casa'){
                     fecha_devolucion.setDate(fecha_prestamo.getDate() + 7)
                 }
@@ -519,9 +649,19 @@ const resolvers = {
                     let tiempoMillis = 3 * 60 * 60 * 1000; 
                     fecha_devolucion.setTime(fecha_prestamo.getTime() + tiempoMillis)
                 }
+
+                else{
+                    console.log("Ingrese lugar de préstamo correcto");
+                    return null;
+                }
             }
 
-            if(ejemplarFind !== null && usuarioFind !== null && bibliotecarioFind !== null){
+            else{
+                console.log("Ingrese tipo de libro correcto");
+                return null;
+            }
+
+            if(ejemplarFind !== null && usuarioFind !== null && bibliotecarioFind !== null && comprobanteFind !== null){
                 const prestamo = new Prestamo({fecha_prestamo: fecha_prestamo, fecha_devolucion: fecha_devolucion, lugar: lugar, ejemplar: ejemplarFind._id, usuario: usuarioFind._id, bibliotecario: bibliotecarioFind._id})
 
                 //Agregar referencia al libro
@@ -535,24 +675,57 @@ const resolvers = {
                 bibliotecarioFind.prestamos.push(prestamo._id);
                 await bibliotecarioFind.save();
 
+                //Agregar referencia a comprobante
+                comprobanteFind.prestamos.push(prestamo._id);
+                await comprobanteFind.save();
+
                 await prestamo.save();
 
                 return prestamo;
+            } else{
+                console.log("Ingrese ejemplar, usuario, comprobante y/o bibliotecario válidos")
+                return null;
             }
         },
 
         async addUsuario(obj, {input}){
             let {rut, nombre, apellido, direccion, telefono, correo, contrasenia, foto, huella} = input;
-            const usuario = new Usuario({rut: rut, nombre: nombre, apellido: apellido, direccion: direccion, telefono: telefono, correo: correo, contrasenia: contrasenia, foto: foto, huella: huella, activo: false});
-            await usuario.save();
-            return usuario;
+            
+            usuario_correo = await Usuario.find({correo: correo});
+            usuario_rut = await Usuario.find({rut: rut});
+
+            if (usuario_correo.length !== 0 || usuario_rut.length !== 0){
+                console.log('Usuario ya existente');
+                return null
+            }
+            else{
+                const usuario = new Usuario({rut: rut, nombre: nombre, apellido: apellido, direccion: direccion, telefono: telefono, correo: correo, contrasenia: contrasenia, foto: foto, huella: huella, activo: false});
+                await usuario.save();
+                return usuario;
+            }
+            
         },
 
         async addBibliotecario(obj, {input}){
             let {rut, nombre, apellido, correo, contrasenia, foto} = input;
-            const bibliotecario = new Bibliotecario({rut: rut, nombre: nombre, apellido: apellido, correo: correo, contrasenia: contrasenia, foto: foto, activo: true});
-            await bibliotecario.save();
-            return bibliotecario
+
+            bib_correo = await Bibliotecario.find({correo: correo});
+            bib_rut = await Bibliotecario.find({rut: rut});
+
+            if (bib_correo.length !== 0 && bib_rut.length !== 0){
+                console.log('Bibliotecario ya existente');
+                return null
+            } else{
+                const bibliotecario = new Bibliotecario({rut: rut, nombre: nombre, apellido: apellido, correo: correo, contrasenia: contrasenia, foto: foto, activo: true});
+                await bibliotecario.save();
+                return bibliotecario
+            }
+        },
+
+        async addComprobante(obj, {input}){
+            const comprobante = new Comprobante(input);
+            await comprobante.save();
+            return comprobante
         },
 
         async updateLibro(obj, { id, input }){
@@ -575,6 +748,8 @@ const resolvers = {
                 await ejemplarFind.updateOne({estado: 'Reservado'});
 
                 return solicitud;
+            } else{
+                console.log("Ingrese una solicitud válida");
             }
             
             
@@ -596,6 +771,7 @@ const resolvers = {
             fecha_actualizar.setTime(fecha_actualizar.getTime()+(30*60*1000));
             const job = schedule.scheduleJob(fecha_actualizar, async function(){
                 await ejemplar.updateOne({estado: 'Disponible'});
+                console.log('Ejemplar ', ejemplar._id, ' disponible');
             });
 
             //Calcular sancion
@@ -755,6 +931,28 @@ const resolvers = {
                 }
             }
             
+        },
+
+        async deleteComprobante(obj, {id}){
+            const comprobante = await Comprobante.findById(id);
+
+            if (comprobante !== null){
+                for (const i in comprobante.prestamos){
+                    //console.log(i);
+                    let prestamo = await Prestamo.findById(comprobante.prestamos[i]);
+                    await prestamo.updateOne({comprobante: null});
+                }
+    
+                await comprobante.deleteOne({_id: id});
+                return {
+                    message: "Comprobante eliminado"
+                }
+            }
+            else{
+                return {
+                    message: "Ingrese comprobante valido"
+                }
+            }
         }
     }
 }

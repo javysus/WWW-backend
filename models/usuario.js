@@ -13,7 +13,8 @@ const usuarioSchema = new mongoose.Schema({
     huella: [Boolean],
     sancion: Date,
     prestamos: [{type: mongoose.Schema.Types.ObjectId, ref:'Prestamo'}],
-    solicitudes: [{type: mongoose.Schema.Types.ObjectId, ref:'Solicitud'}]
+    solicitudes: [{type: mongoose.Schema.Types.ObjectId, ref:'Solicitud'}],
+    comprobantes: [{type: mongoose.Schema.Types.ObjectId, ref:'Comprobante'}]
 })
 
 module.exports = mongoose.model('Usuario', usuarioSchema);

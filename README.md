@@ -42,6 +42,605 @@ La sanción del usuario en caso de devolución con atraso corresponde a **el tri
 ## Modelo
 ![Modelo de biblioteca](./Modelo_Biblioteca.png)
 
+## Requerimientos funcionales
+1. Los usuarios del sistema de préstamo y devolución (bibliotecarios y administrativo de biblioteca), deben autenticarse al ingresar al sistema.
+    * Este requerimiento se aborda con la validación del usuario y bibliotecario que ingresa sesión (**ValidacionUsuario** y **ValidacionBibliotecario**) donde se valida que la contraseña ingresada corresponde a la del correo ingresado.
+2. Se debe crear la administración de la colección bibliográfica, ingresando información de los documentos como título, autor, tipo (libro, audio, video, etc.), editorial, edición, año de edición, ubicación en estanterías, etc.
+    * Este requerimiento se aborda con la creación de libros y ejemplares (**addLibro y addEjemplar**), donde se específica los atributos mencionados. Para más detalle, ver la explicación de aquellos métodos.
+3. La consulta de catálogo en los totem’s no necesita autenticación.
+    * Este requerimiento no se aborda en esta capa del sistema.
+4. La solicitud de préstamo en los totem’s requiere autenticación por parte del usuario.
+    * Este requerimiento no se aborda en esta capa del sistema.
+5.	El sistema debe permitir registrar la ficha del usuario, en esta ficha se registrarán datos como rut, nombres y apellidos, dirección, teléfono, correo electrónico, huella digital y foto.
+    * Este requerimiento se aborda con la creación del usuario (**addUsuario**). Para más detalle, ver la explicación del método.
+6.	El usuario debe recibir un correo electrónico para activar la cuenta, si el usuario no realiza la validación a través del correo, la cuenta no se activará.
+    * En esta parte del sistema, se aborda parte del requerimiento con la actualización (**updateUsuario**) de si el usuario se encuentra activo o no.
+7.	Se debe generar un catálogo electrónico con el cual interactuará el usuario, dicho catálogo debe permitir la búsqueda de documentos por nombre, autor o categoría. Una vez aplicado el filtro se deben mostrar los datos del documento más su disponibilidad, se debe mostrar además cuantos ejemplares se encuentran prestados en sala (el usuario puede elegir esperar que el documento vuelva a estar en estanterías).
+    * Este requerimiento se aborda con el método **getCatalogo**, el cual permite realizar la consulta por los campos mencionados para encontrar libros. Para más detalles, ver explicación del método.
+8.	Se puede solicitar el préstamo en sala o a domicilio de los libros que se elijan desde el catálogo.
+    * Este requerimiento se aborda con la creación de una solicitud (**addSolicitud**), la cual debe ser ingresada especificando si el préstamo es en sala de lectura, sala multimedia o a casa. Para más detalles, ver explicación del método.
+9.	Se debe ofrecer la posibilidad de reservar un ejemplar para una fecha específica a través del tótem.
+    * Este requerimiento se aborda con la creación de una solicitud (**addSolicitud**), la cual debe ser ingresada con una fecha de reserva, la cual puede ser a futuro o para el mismo día.
+10.	El bibliotecario debe tener implementada una pantalla que le permita ver las solicitudes de préstamo, con estos datos puede buscar los documentos en estantería.
+    * Este requerimiento se aborda con el metodo **getSolicitudesEstado**, el cual muestra las solicitudes de prestamo que no han sido gestionadas aún. Para más detalles, ver explicación del metodo
+11.	Una vez que el usuario se acerca al mesón, debe registrarse el préstamo ingresando los libros prestados al sistema, el rut y la huella digital del usuario como mecanismo de validación. La aplicación debe calcular la fecha y hora de devolución en caso que el préstamo sea a domicilio y solo la hora de devolución en caso que el préstamo sea en sala.
+    * Este requerimiento se aborda con la creación del préstamo (**addPrestamo**) donde es necesario ingresar el usuario que va a requerir el préstamo y la fecha del préstamo. Este método calculará automáticamente la fecha y hora de devolución según los criterios presentados más arriba. Para la validación del usuario, se aborda con el método **ValidacionRutUsuario** donde se valida que la huella ingresada corresponde a la registrada con el RUT.
+12.	Una vez ingresado el préstamo a domicilio se debe generar un comprobante que indique cada uno de los documentos en préstamo más la fecha/hora de devolución para cada uno de ellos (considerando que no todos los documentos tienen el mismo plazo de préstamo).
+    * Este requerimiento se aborda con la creación de un comprobante (**addComprobante**) y la creación de préstamos (**addPrestamo**) donde se considerará que desde el controlador, se creará primero un comprobante sin prestamos asociados, para que cuando se vayan agregando cada préstamo ingresado por interfaz se vaya creando con la referencia del comprobante anteriormente creado, y de igual forma se van agregando los préstamos a Comprobante. Finalmente, para ver la información detallada del préstamo, se tiene el método **getComprobante**
+13.	Se debe crear una opción que permita al administrativo de biblioteca revisar los préstamos en sala que están vencidos, esto con la finalidad de solicitar la devolución.
+    * Este requerimiento se aborda con el método **getPrestamosVencidos**, ingresando el lugar de dónde se quieren ver los préstamos vencidos, pudiendo ser Sala Multimedia, Sala Lectura o Casa.
+14.	Se debe crear una opción que permita al administrativo de biblioteca revisar los préstamos a domicilio que se encuentran en mora y enviar en forma automática un recordatorio de devolución.
+    * Este requerimiento se aborda con el método mencionado anteriormente **getPrestamosVencidos**, en este caso, ingresando el lugar de Casa. El recordatorio de devolución no se aborda en esta capa del sistema, sin embargo, con este método se obtiene la información de los usuarios con préstamos vencidos para enviar los recordatorios.
+15.	Se debe generar la devolución de documentos, al ingresar el código del ejemplar éste debe quedar marcado como devuelto y media hora después debe quedar marcado como disponible (para dar tiempo a los bibliotecarios de devolverlo a las estanterías).
+   * Este requerimiento se aborda con el método **updatePrestamo** que corresponde a realizar una devolución ingresando la fecha de devolución. Al devolver el préstamo, se actualiza el estado del ejemplar como Devuelto y mediante el uso de NodeSchedule luego de 30 minutos se actualiza a Disponible.
+16.	En caso de devolución con atraso, el sistema debe calcular una sanción (en tiempo) al usuario, es decir, no podrá solicitar préstamos hasta que se cumpla el tiempo sancionado.
+   * Este requerimiento se aborda con el método **updatePrestamo** que corresponde a realizar una devolución ingresando la fecha de devolución. Al devolver el préstamo, se compara con la fecha de devolución pronosticada, en caso de que la fecha de devolución real sea mayor, se calcula la sanción correspondiente, actualizando el atributo sanción del Usuario.
+
+## Proceso de test
+1. Acceder a localhost:8090/graphql e ir a Apollo Server
+2. Agregar un libro, utilizando la siguiente Mutation en Apollo Server:
+~~~
+mutation Mutation($input: LibroInput) { 
+  addLibro(input: $input) {
+    id
+    titulo
+    autor
+    editorial
+    anio
+    edicion
+    categoria
+    tipo
+    subtipo
+  }
+}
+~~~
+En este caso, se especificó el siguiente input:
+~~~
+{
+  "input": {
+    "titulo": "PRINCIPITO, EL",
+    "autor": "DE SAINT-EXUPERY, ANTOINE",
+    "editorial": "SALAMANDRA",
+    "anio": 1943,
+    "edicion": "Edición 2016",
+    "categoria": "Literatura",
+    "tipo": "Libro",
+    "subtipo": "Clásicos Universales"
+  }
+}
+~~~
+Retornando lo siguiente:
+~~~
+{
+  "data": {
+    "addLibro": {
+      "id": "633670ca2436056ff7585875",
+      "titulo": "PRINCIPITO, EL",
+      "autor": "DE SAINT-EXUPERY, ANTOINE",
+      "editorial": "SALAMANDRA",
+      "anio": 1943,
+      "edicion": "Edición 2016",
+      "categoria": "Literatura",
+      "tipo": "Libro",
+      "subtipo": "Clásicos Universales"
+    }
+  }
+}
+~~~
+3. Agregar un ejemplar para ese libro
+~~~
+mutation AddEjemplar($input: EjemplarInput) {
+  addEjemplar(input: $input) {
+    id
+    estado
+    ubicacion
+  }
+}
+
+{
+  "input": {
+    "ubicacion": "Estanteria L1, Piso 1",
+    "libro": "633670ca2436056ff7585875"
+  }
+}
+~~~
+Retornando lo siguiente:
+~~~
+{
+  "data": {
+    "addEjemplar": {
+      "id": "633671542436056ff7585878",
+      "estado": "Disponible",
+      "ubicacion": "Estanteria L1, Piso 1"
+    }
+  }
+}
+~~~
+4. Repetir el proceso para tener dos ejemplares del mismo libro
+~~~
+{
+  "data": {
+    "addEjemplar": {
+      "id": "6336717c2436056ff758587c",
+      "estado": "Disponible",
+      "ubicacion": "Estanteria L1, Piso 1"
+    }
+  }
+}
+~~~
+5.  Crear un usuario
+~~~
+mutation Mutation($input: UsuarioInput) {
+  addUsuario(input: $input) {
+    id
+    rut
+    nombre
+    apellido
+    direccion
+    telefono
+    correo
+    contrasenia
+    activo
+    foto
+    huella
+    sancion
+  }
+}
+
+{
+  "input": {
+    "rut": "1234567-8",
+    "nombre": "ERNESTO EDUARDO",
+    "apellido": "VIVANCO TAPIA",
+    "direccion": "Vicuña Mackenna 3939, San Joaquín, Región Metropolitana",
+    "telefono": 912345678,
+    "correo": "eduardo.vivanco@gmail.com",
+    "contrasenia": "wwwusm"
+  }
+}
+~~~
+Retorna:
+~~~
+{
+  "data": {
+    "addUsuario": {
+      "id": "633673f368595df23484392b",
+      "rut": "1234567-8",
+      "nombre": "ERNESTO EDUARDO",
+      "apellido": "VIVANCO TAPIA",
+      "direccion": "Vicuña Mackenna 3939, San Joaquín, Región Metropolitana",
+      "telefono": 912345678,
+      "correo": "eduardo.vivanco@gmail.com",
+      "contrasenia": "wwwusm",
+      "activo": false,
+      "foto": null,
+      "huella": [],
+      "sancion": null
+    }
+  }
+}
+~~~
+6.  Crear un bibliotecario
+~~~
+mutation AddBibliotecario($input: BibliotecarioInput) {
+  addBibliotecario(input: $input) {
+    id
+    rut
+    nombre
+    apellido
+    correo
+    contrasenia
+    foto
+    activo
+  }
+}
+
+{
+  "input": {
+    "rut": "19867550-4",
+    "nombre": "PEDRO DANTE",
+    "apellido": "MÉRIDA ÁLVAREZ",
+    "correo": "pedro.merida@sansano.usm.cl",
+    "contrasenia": "wwwsansano",
+  }
+}
+~~~
+Retorna
+~~~
+{
+  "data": {
+    "addBibliotecario": {
+      "id": "63367488f20836aa80651a21",
+      "rut": "19867550-4",
+      "nombre": "PEDRO DANTE",
+      "apellido": "MÉRIDA ÁLVAREZ",
+      "correo": "pedro.merida@sansano.usm.cl",
+      "contrasenia": "wwwsansano",
+      "foto": null,
+      "activo": true
+    }
+  }
+}
+~~~
+7.  Activar cuenta de usuario
+~~~
+mutation UpdateUsuario($updateUsuarioId: ID!, $input: UsuarioActualizar) {
+  updateUsuario(id: $updateUsuarioId, input: $input) {
+    id
+    rut
+    nombre
+    activo
+  }
+}
+
+{
+  "updateUsuarioId": "633673f368595df23484392b",
+  "input": {
+    "activo": true
+  }
+}
+~~~
+Retorna
+~~~
+{
+  "data": {
+    "updateUsuario": {
+      "id": "633673f368595df23484392b",
+      "rut": "1234567-8",
+      "nombre": "ERNESTO EDUARDO",
+      "activo": true
+    }
+  }
+}
+~~~
+8.  Realizar búsqueda del catálogo por "principito" y autor "saint"
+~~~
+query Query($titulo: String, $autor: String) {
+  getLibrosCatalogo(titulo: $titulo, autor: $autor) {
+    id_libro
+    titulo
+    autor
+    editorial
+    edicion
+    anio
+    categoria
+    tipo
+    subtipo
+    ejemplares_disponibles
+    ejemplares_sala
+  }
+}
+
+{
+  "titulo": "principito",
+  "autor": "saint"
+}
+~~~
+
+La consulta retorna
+
+~~~
+{
+  "data": {
+    "getLibrosCatalogo": [
+      {
+        "id_libro": "633670ca2436056ff7585875",
+        "titulo": "PRINCIPITO, EL",
+        "autor": "DE SAINT-EXUPERY, ANTOINE",
+        "editorial": "SALAMANDRA",
+        "edicion": "Edición 2016",
+        "anio": 1943,
+        "categoria": "Literatura",
+        "tipo": "Libro",
+        "subtipo": "Clásicos Universales",
+        "ejemplares_disponibles": 2,
+        "ejemplares_sala": 0
+      }
+    ]
+  }
+}
+~~~
+1.  Realizar solicitud de un libro con la mutation addSolicitud, donde fecha_reserva debe ser una ISO Date.
+~~~
+mutation Mutation($input: SolicitudInput) {
+  addSolicitud(input: $input) {
+    id
+    fecha_reserva
+    createdAt
+    estado_solicitud
+  }
+}
+
+{
+  "input": {
+    "id_libro": "633670ca2436056ff7585875",
+    "id_usuario": "633673f368595df23484392b",
+    "fecha_reserva": "2022-09-30T02:00:00Z"
+  }
+}
+~~~
+Retorna
+~~~
+{
+  "data": {
+    "addSolicitud": {
+      "id": "6336786a96ae5b3c0a5ab957",
+      "fecha_reserva": "2022-09-30T02:00:00.000Z",
+      "createdAt": "2022-09-30T05:02:34.354Z",
+      "estado_solicitud": false
+    }
+  }
+}
+~~~
+10. Revisar las solicitudes aún no gestionadas
+~~~
+query Query($estadoSolicitud: Boolean) {
+  getSolicitudEstado(estado_solicitud: $estadoSolicitud) {
+    id
+    fecha_reserva
+    createdAt
+    updatedAt
+    estado_solicitud
+    libro {
+      id
+      titulo
+    }
+  }
+}
+
+{
+  "estadoSolicitud": false
+}
+~~~
+Retorna
+~~~
+{
+  "data": {
+    "getSolicitudEstado": [
+      {
+        "id": "6336786a96ae5b3c0a5ab957",
+        "fecha_reserva": "2022-09-30T02:00:00.000Z",
+        "createdAt": "2022-09-30T05:02:34.354Z",
+        "updatedAt": "2022-09-30T05:02:34.354Z",
+        "estado_solicitud": false,
+        "libro": {
+          "id": "633670ca2436056ff7585875",
+          "titulo": "PRINCIPITO, EL"
+        }
+      }
+    ]
+  }
+}
+~~~
+11. Actualizar la solicitud como gestionada, asignandole un ejemplar
+~~~
+mutation Mutation($updateSolicitudId: ID!, $input: SolicitudActualizar) {
+  updateSolicitud(id: $updateSolicitudId, input: $input) {
+    id
+    fecha_reserva
+    createdAt
+    updatedAt
+    estado_solicitud
+  }
+}
+
+{
+  "updateSolicitudId": "6336786a96ae5b3c0a5ab957",
+  "input": {
+    "estado_solicitud": true,
+    "ejemplar": "633671542436056ff7585878"
+  }
+}
+~~~
+Retorna la solicitud actualiza
+~~~
+{
+  "data": {
+    "updateSolicitud": {
+      "id": "6336786a96ae5b3c0a5ab957",
+      "fecha_reserva": "2022-09-30T02:00:00.000Z",
+      "createdAt": "2022-09-30T05:02:34.354Z",
+      "updatedAt": "2022-09-30T05:09:02.610Z",
+      "estado_solicitud": true
+    }
+  }
+}
+~~~
+12. Revisar estado del ejemplar solicitud
+~~~
+query Query($getEjemplarId: ID!) {
+  getEjemplar(id: $getEjemplarId) {
+    id
+    estado
+    ubicacion
+  }
+}
+
+{
+  "getEjemplarId": "633671542436056ff7585878"
+}
+~~~
+Retorna el ejemplar
+~~~
+{
+  "data": {
+    "getEjemplar": {
+      "id": "633671542436056ff7585878",
+      "estado": "Reservado",
+      "ubicacion": "Estanteria L1, Piso 1"
+    }
+  }
+}
+~~~
+Notando que su estado es "Reservado"
+
+13. El usuario se acerca al mesón para solicitar el ejemplar a domicilio, el bibliotecario crea el préstamo mediante la mutation addPrestamo. Se crea un comprobante vacío para ir agregando los préstamos con la mutation addComprobante.
+~~~
+mutation AddComprobante($input: ComprobanteInput) {
+  addComprobante(input: $input) {
+    id
+    fecha_prestamo
+  }
+}
+
+{
+  "input": {
+    "fecha_prestamo": "2022-09-30T05:18:00Z",
+    "usuario": "633673f368595df23484392b",
+    "bibliotecario": "63367488f20836aa80651a21"
+  }
+}
+~~~
+Retorna el comprobante
+~~~
+{
+  "data": {
+    "addComprobante": {
+      "id": "63367bd6b540cb5c4042614c",
+      "fecha_prestamo": "2022-09-30T05:18:00.000Z"
+    }
+  }
+}
+~~~
+
+Luego, se crea el préstamo
+~~~
+mutation Mutation($input: PrestamoInput) {
+  addPrestamo(input: $input) {
+    id
+    fecha_prestamo
+    fecha_devolucion
+    fecha_devol_real
+    lugar
+  }
+}
+
+{
+  "input": {
+    "fecha_prestamo": "2022-09-30T05:18:00Z",
+    "lugar": "Casa",
+    "ejemplar": "633671542436056ff7585878",
+    "usuario": "633673f368595df23484392b",
+    "bibliotecario": "63367488f20836aa80651a21",
+    "comprobante": "63367bd6b540cb5c4042614c"
+  }
+}
+~~~
+Retorna el préstamo creado
+~~~
+{
+  "data": {
+    "addPrestamo": {
+      "id": "63367cc98a88db85a87d20d1",
+      "fecha_prestamo": "2022-09-30T05:18:00.000Z",
+      "fecha_devolucion": "2022-10-15T05:18:00.000Z",
+      "fecha_devol_real": null,
+      "lugar": "Casa"
+    }
+  }
+}
+~~~
+14. Revisar el comprobante del préstamo
+~~~
+query Query($getComprobanteId: ID!) {
+  getComprobante(id: $getComprobanteId) {
+    id
+    fecha_prestamo
+    usuario {
+      rut
+      nombre
+      apellido
+    }
+    bibliotecario {
+      rut
+      nombre
+      apellido
+    }
+    prestamos {
+      id
+      fecha_devolucion
+      ejemplar {
+        id
+        libro {
+          titulo
+          autor
+        }
+      }
+    }
+  }
+}
+
+{
+  "getComprobanteId": "63367bd6b540cb5c4042614c"
+}
+~~~
+Retorna
+~~~
+{
+  "data": {
+    "getComprobante": {
+      "id": "63367bd6b540cb5c4042614c",
+      "fecha_prestamo": "2022-09-30T05:18:00.000Z",
+      "usuario": {
+        "rut": "1234567-8",
+        "nombre": "ERNESTO EDUARDO",
+        "apellido": "VIVANCO TAPIA"
+      },
+      "bibliotecario": {
+        "rut": "19867550-4",
+        "nombre": "PEDRO DANTE",
+        "apellido": "MÉRIDA ÁLVAREZ"
+      },
+      "prestamos": [
+        {
+          "id": "63367cc98a88db85a87d20d1",
+          "fecha_devolucion": "2022-10-15T05:18:00.000Z",
+          "ejemplar": {
+            "id": "633671542436056ff7585878",
+            "libro": {
+              "titulo": "PRINCIPITO, EL",
+              "autor": "DE SAINT-EXUPERY, ANTOINE"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+~~~
+15. Cambiar la fecha del dispositivo a 16 de octubre, fecha en donde el préstamo creado estará vencido. Luego, buscar los préstamos vencidos en Casa mediante la query getPrestamosVencidos
+~~~
+query GetPrestamosVencidos($lugar: String) {
+  getPrestamosVencidos(lugar: $lugar) {
+    id_prestamo
+    fecha_devolucion
+    lugar
+    duration
+    unit
+  }
+}
+
+{
+  "lugar": "Casa"
+}
+~~~
+Retorna
+~~~
+{
+  "data": {
+    "getPrestamosVencidos": [
+      {
+        "id_prestamo": "63367cc98a88db85a87d20d1",
+        "fecha_devolucion": "2022-10-15T05:18:00.000Z",
+        "lugar": "Casa",
+        "duration": 1,
+        "unit": "dias"
+      }
+    ]
+  }
+}
+~~~
+1.  Generar la devolución del préstamo   
 ## Libros
 
 ### Modelo
