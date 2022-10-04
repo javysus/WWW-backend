@@ -400,13 +400,13 @@ const resolvers = {
         },
 
         async getSolicitudes(obj){
-            const solicitudes = await Solicitud.find();
-            return solicitudes.populate('libro');
+            const solicitudes = await Solicitud.find().populate('libro');
+            return solicitudes;
         },
 
         async getSolicitud(obj, { id }){
-            const solicitud = await Solicitud.findById(id);
-            return solicitud.populate('libro').populate('usuario');
+            const solicitud = await Solicitud.findById(id).populate('libro').populate('usuario');
+            return solicitud;
         },
 
         async getSolicitudEstado(obj, { estado_solicitud }){
@@ -592,7 +592,7 @@ const resolvers = {
             let libroFind = await Libro.findById(id_libro);
             let usuarioFind = await Usuario.findById(id_usuario);
             if(libroFind !== null && usuarioFind !== null){
-                const solicitud = new Solicitud({estado_solicitud: false, fecha_reserva: fecha_reserva, libro: libroFind._id})
+                const solicitud = new Solicitud({estado_solicitud: false, fecha_reserva: fecha_reserva, libro: libroFind._id, usuario: usuarioFind._id})
 
                 //Agregar referencia al libro
                 libroFind.solicitudes.push(solicitud._id);

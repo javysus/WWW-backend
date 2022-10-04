@@ -3,7 +3,7 @@ La biblioteca de Estación Central (BEC) cuenta con una amplia colección de lib
 Este recinto, además, cuenta con una extensa colección de multimedia incluyendo películas y documentales en formato de DVD y Blue Ray, además de variados registros auditivos (música, relatos, colección de sonidos, etc.).
 Los bibliotecarios se encuentran capacitados para responder casi en la totalidad a las consultas de los usuarios de la biblioteca, por tener amplio conocimiento de la colección presente en las estanterías.
 
-## Autores
+## Autores (Los ChocoLovers) :chocolate_bar:
 * Pedro Mérida
 * Javiera Villarroel
 
@@ -42,6 +42,12 @@ La sanción del usuario en caso de devolución con atraso corresponde a **el tri
 ## Modelo
 ![Modelo de biblioteca](./Modelo_Biblioteca.png)
 
+## Relaciones más importantes
+El negocio funciona de la siguiente manera:
+  * Un usuario revisa el catálogo de libros de la biblioteca y realiza una solicitud de los libros que desea adquirir, luego un bibliotecario gestiona esta solicitud y busca los libros en las estanterias de la biblioteca para entregarlos, finalmente cuando el usuario se acerca al meson a recoger los libros solicitados, se realiza un prestamo, el cual se utiliza para el seguimiento de los libros prestados y para establecer fechas de devolución.
+
+De la descripción anterior podemos extraer que las relaciones mas importantes son las que contienen a "Solicitud", ya que sin esta, los usuario no podrian pedir libros a la biblioteca, por ende no habria negocio; y "Prestamo", ya que sin este, no se podrian hacer seguimiento de los libros prestados, no se establecerian fechas limite y el negocio seria incapaz de existir por la falta de control.
+
 ## Requerimientos funcionales
 1. Los usuarios del sistema de préstamo y devolución (bibliotecarios y administrativo de biblioteca), deben autenticarse al ingresar al sistema.
     * Este requerimiento se aborda con la validación del usuario y bibliotecario que ingresa sesión (**ValidacionUsuario** y **ValidacionBibliotecario**) donde se valida que la contraseña ingresada corresponde a la del correo ingresado.
@@ -72,9 +78,9 @@ La sanción del usuario en caso de devolución con atraso corresponde a **el tri
 14.	Se debe crear una opción que permita al administrativo de biblioteca revisar los préstamos a domicilio que se encuentran en mora y enviar en forma automática un recordatorio de devolución.
     * Este requerimiento se aborda con el método mencionado anteriormente **getPrestamosVencidos**, en este caso, ingresando el lugar de Casa. El recordatorio de devolución no se aborda en esta capa del sistema, sin embargo, con este método se obtiene la información de los usuarios con préstamos vencidos para enviar los recordatorios.
 15.	Se debe generar la devolución de documentos, al ingresar el código del ejemplar éste debe quedar marcado como devuelto y media hora después debe quedar marcado como disponible (para dar tiempo a los bibliotecarios de devolverlo a las estanterías).
-   * Este requerimiento se aborda con el método **updatePrestamo** que corresponde a realizar una devolución ingresando la fecha de devolución. Al devolver el préstamo, se actualiza el estado del ejemplar como Devuelto y mediante el uso de NodeSchedule luego de 30 minutos se actualiza a Disponible.
+    * Este requerimiento se aborda con el método **updatePrestamo** que corresponde a realizar una devolución ingresando la fecha de devolución. Al devolver el préstamo, se actualiza el estado del ejemplar como Devuelto y mediante el uso de NodeSchedule luego de 30 minutos se actualiza a Disponible.
 16.	En caso de devolución con atraso, el sistema debe calcular una sanción (en tiempo) al usuario, es decir, no podrá solicitar préstamos hasta que se cumpla el tiempo sancionado.
-   * Este requerimiento se aborda con el método **updatePrestamo** que corresponde a realizar una devolución ingresando la fecha de devolución. Al devolver el préstamo, se compara con la fecha de devolución pronosticada, en caso de que la fecha de devolución real sea mayor, se calcula la sanción correspondiente, actualizando el atributo sanción del Usuario.
+    * Este requerimiento se aborda con el método **updatePrestamo** que corresponde a realizar una devolución ingresando la fecha de devolución. Al devolver el préstamo, se compara con la fecha de devolución pronosticada, en caso de que la fecha de devolución real sea mayor, se calcula la sanción correspondiente, actualizando el atributo sanción del Usuario.
 
 ## Proceso de test
 1. Acceder a localhost:8090/graphql e ir a Apollo Server
@@ -127,7 +133,7 @@ Retornando lo siguiente:
   }
 }
 ~~~
-3. Agregar un ejemplar para ese libro
+3. Agregar un ejemplar para ese libro con AddEjemplar
 ~~~
 mutation AddEjemplar($input: EjemplarInput) {
   addEjemplar(input: $input) {
@@ -168,7 +174,7 @@ Retornando lo siguiente:
   }
 }
 ~~~
-5.  Crear un usuario
+5.  Crear un usuario con AddUsuario
 ~~~
 mutation Mutation($input: UsuarioInput) {
   addUsuario(input: $input) {
@@ -220,7 +226,7 @@ Retorna:
   }
 }
 ~~~
-6.  Crear un bibliotecario
+6.  Crear un bibliotecario con AddBibliotecario
 ~~~
 mutation AddBibliotecario($input: BibliotecarioInput) {
   addBibliotecario(input: $input) {
@@ -262,7 +268,7 @@ Retorna
   }
 }
 ~~~
-7.  Activar cuenta de usuario
+7.  Activar cuenta de usuario con UpdateUsuario, cambiando el campo de "activo" a true
 ~~~
 mutation UpdateUsuario($updateUsuarioId: ID!, $input: UsuarioActualizar) {
   updateUsuario(id: $updateUsuarioId, input: $input) {
@@ -293,7 +299,7 @@ Retorna
   }
 }
 ~~~
-8.  Realizar búsqueda del catálogo por "principito" y autor "saint"
+8.  Realizar búsqueda del catálogo por "principito" y autor "saint", con getLibrosCatalogo
 ~~~
 query Query($titulo: String, $autor: String) {
   getLibrosCatalogo(titulo: $titulo, autor: $autor) {
@@ -372,7 +378,7 @@ Retorna
   }
 }
 ~~~
-10. Revisar las solicitudes aún no gestionadas
+10. Revisar las solicitudes aún no gestionadas con getSolicitudEstado, un input false en "estadoSolicitud" mostrara dichas solicitudes.
 ~~~
 query Query($estadoSolicitud: Boolean) {
   getSolicitudEstado(estado_solicitud: $estadoSolicitud) {
@@ -412,7 +418,7 @@ Retorna
   }
 }
 ~~~
-11. Actualizar la solicitud como gestionada, asignandole un ejemplar
+11. Actualizar la solicitud como gestionada, asignandole un ejemplar con updateSolicitud
 ~~~
 mutation Mutation($updateSolicitudId: ID!, $input: SolicitudActualizar) {
   updateSolicitud(id: $updateSolicitudId, input: $input) {
@@ -446,7 +452,7 @@ Retorna la solicitud actualiza
   }
 }
 ~~~
-12. Revisar estado del ejemplar solicitud
+12. Revisar estado del ejemplar solicitud con getEjemplar
 ~~~
 query Query($getEjemplarId: ID!) {
   getEjemplar(id: $getEjemplarId) {
@@ -503,7 +509,7 @@ Retorna el comprobante
 }
 ~~~
 
-Luego, se crea el préstamo
+Luego, se crea el préstamo con addPrestamo
 ~~~
 mutation Mutation($input: PrestamoInput) {
   addPrestamo(input: $input) {
@@ -540,7 +546,7 @@ Retorna el préstamo creado
   }
 }
 ~~~
-14. Revisar el comprobante del préstamo
+14. Revisar el comprobante del préstamo con getComprobante
 ~~~
 query Query($getComprobanteId: ID!) {
   getComprobante(id: $getComprobanteId) {
@@ -640,7 +646,131 @@ Retorna
   }
 }
 ~~~
-1.  Generar la devolución del préstamo   
+16.  Generar la devolución del préstamo con el método updatePrestamo, indicando el id del prestamo a actualizar. La fecha de devolución real al hacer la mutation, por lo que nuevamente debemos tener como fecha 16 de octubre.
+~~~
+mutation UpdatePrestamo($updatePrestamoId: ID!) {
+  updatePrestamo(id: $updatePrestamoId) {
+    id
+    fecha_prestamo
+    fecha_devolucion
+    fecha_devol_real
+    lugar
+  }
+}
+
+{
+  "updatePrestamoId": "63367cc98a88db85a87d20d1"
+}
+~~~
+Retornando el prestamo actualizando
+~~~
+{
+  "data": {
+    "updatePrestamo": {
+      "id": "63367cc98a88db85a87d20d1",
+      "fecha_prestamo": "2022-09-30T05:18:00.000Z",
+      "fecha_devolucion": "2022-10-15T05:18:00.000Z",
+      "fecha_devol_real": "2022-10-16T05:03:25.857Z",
+      "lugar": "Casa"
+    }
+  }
+}
+~~~
+17. Debido a que se devolvió un préstamo vencido, podemos ver la sanción del usuario con el método getUsuario
+~~~
+query Query($getUsuarioId: ID!) {
+  getUsuario(id: $getUsuarioId) {
+    id
+    nombre
+    apellido
+    sancion
+  }
+}
+
+{
+  "getUsuarioId": "633673f368595df23484392b"
+}
+~~~
+Retornando
+~~~
+{
+  "data": {
+    "getUsuario": {
+      "id": "633673f368595df23484392b",
+      "nombre": "ERNESTO EDUARDO",
+      "apellido": "VIVANCO TAPIA",
+      "sancion": "2022-10-19T04:19:43.428Z"
+    }
+  }
+}
+~~~
+Notando que el usuario tiene una sanción de 3 días
+18. Luego, se verifica el estado del ejemplar con getEjemplar, el cual debe ser "Devuelto" antes de que pasen 30 minutos desde que se realizó la devolución
+~~~
+query GetEjemplar($getEjemplarId: ID!) {
+  getEjemplar(id: $getEjemplarId) {
+    ubicacion
+    id
+    estado
+  }
+}
+
+{
+  "getEjemplarId": "633671542436056ff7585878"
+}
+~~~
+Retornando
+~~~
+{
+  "data": {
+    "getEjemplar": {
+      "ubicacion": "Estanteria L1, Piso 1",
+      "id": "633671542436056ff7585878",
+      "estado": "Devuelto"
+    }
+  }
+}
+~~~
+19. Luego, se espera 30 minutos para verificar nuevamente el estado del ejemplar con getLibro. En esta ocasión, se testea el método getLibro para ver los ejemplares del libro El Principito y su estado.
+~~~
+query Query($getLibroId: ID!) {
+  getLibro(id: $getLibroId) {
+    id
+    ejemplares {
+      ubicacion
+      id
+      estado
+    }
+  }
+}
+
+{
+  "getLibroId": "633670ca2436056ff7585875"
+}
+~~~
+Retornando
+~~~
+{
+  "data": {
+    "getLibro": {
+      "id": "633670ca2436056ff7585875",
+      "ejemplares": [
+        {
+          "ubicacion": "Estanteria L1, Piso 1",
+          "id": "633671542436056ff7585878",
+          "estado": "Disponible"
+        },
+        {
+          "ubicacion": "Estanteria L1, Piso 1",
+          "id": "6336717c2436056ff758587c",
+          "estado": "Disponible"
+        }
+      ]
+    }
+  }
+}
+~~~
+Notando que los dos ejemplares ahora están disponibles.
 ## Libros
 
 ### Modelo
@@ -656,20 +786,20 @@ Retorna
 * ejemplares: [Ejemplar]
 * solicitudes: [Solicitud]
 
-### getLibros
+### Query getLibros
 Se muestran todos los libros de la biblioteca junto con su información
 
-### getLibro
+### Query getLibro
 Se busca un libro por su ID y se muetra la información de dicho libro
 
-### getLibrosCatalogo
+### Query getLibrosCatalogo
 Se busca un libro filtrando segun los siguiente parametros, cada uno es opcional y aceptan información incompleta (nombre incompleto de titulo, autor, etc):
 * título: String
 * autor: String
 * categoria: String
 Este retorna parte de la información del libro y además retorna cuantos ejemplares hay disponibles y cuantos hay en sala.
 
-### addLibro
+### Mutation addLibro
 Se agrega un libro con los siguientes parámetros:
 * titulo: String!
 * autor: String!
@@ -680,7 +810,7 @@ Se agrega un libro con los siguientes parámetros:
 * tipo: String!
 * subtipo: String!
 
-### updateLibro
+### Mutation updateLibro
 Se busca un libro por su ID y se actualiza su información. Se puede actualizar los siguientes parámetros:
 * titulo: String
 * autor: String
@@ -691,7 +821,7 @@ Se busca un libro por su ID y se actualiza su información. Se puede actualizar 
 * tipo: String
 * subtipo: String
 
-### deleteLibro
+### Mutation deleteLibro
 Se busca un libro por su ID y se elimina.
 
 ## Ejemplares
@@ -703,23 +833,23 @@ Se busca un libro por su ID y se elimina.
 * libro: Libro!
 * prestamo: Prestamo
 
-### addEjemplar
+### Mutation addEjemplar
 Agrega un ejemplar con los siguientes parámetros, donde por defecto su estado sera Disponible:
 * ubicacion: String $\rightarrow$ Ubicación dentro de la biblioteca, por ejemplo, estanteria A1.
 * libro: String! $\rightarrow$ ID del libro al cual corresponde el ejemplar.
 
-### updateEjemplar
+### Mutation updateEjemplar
 Se actualiza un ejemplar con el siguiente parámetro opcional
 * ubicacion: String
 Se hace la observación de que el estado de un ejemplar se actualiza solo cuando se crea o se libera un prestamo.
 
-### deleteEjemplar
+### Mutation deleteEjemplar
 Elimina un ejemplar por su ID. Se elimina la referencia de este ejemplar dentro de Libro.
 
-### getEjemplar
+### Query getEjemplar
 Se obtiene un ejemplar por su ID.
 
-### getEjemplares
+### Query getEjemplares
 Se obtienen todos los ejemplares.
 
 ## Solicitudes
@@ -734,16 +864,16 @@ Se obtienen todos los ejemplares.
 * ejemplar: Ejemplar!
 * usuario: Usuario!
 
-### getSolicitudes
+### Query getSolicitudes
 Se muestran todas las solicitudes de libros hechas junto con su información.
 
-### getSolicitud
+### Query getSolicitud
 Se busca una solicitud por su ID y se muetra la información de esta.
 
-### getSolicitudEstado
+### Query getSolicitudEstado
 Se buscan solicitudes de acuerdo a su campo de "Estado solicitud" y se muestran en pantalla, esto para saber que solicitudes estan pendientes por gestionar y cuales no (False si es que aun hay que gestionarla y True si es que no)
 
-### addSolicitud
+### Mutation addSolicitud
 Se agrega una solicitud solicitando los siguientes parámetros:
 * ID del usuario solicitador
 * id_libro: String! $\rightarrow$ ID del libro solicitado
@@ -752,13 +882,13 @@ Se agrega una solicitud solicitando los siguientes parámetros:
 
 Las fechas de creación y actualización son generadas automaticamente y el estado, cuando es creada la solicitud, es por defecto False.
 
-### updateSolicitud
+### Mutation updateSolicitud
 Se busca una solicitud por su ID y se pueden actualizar los siguientes parámetros:
 * estado_solicitud: Boolean
 * ejemplar: String
 La fecha de actualización se actualiza automaticamente.
 
-### deleteSolicitud
+### Mutation deleteSolicitud
 Se busca una solicitud por su ID y se elimina, ademas dicha solicitud también se elimina de la lista de solicitudes del usuario y del libro.
 
 ## Prestamos
@@ -773,7 +903,7 @@ Se busca una solicitud por su ID y se elimina, ademas dicha solicitud también s
 * usuario: Usuario!
 * bibliotecario: Bibliotecario!
 
-### addPrestamo
+### Mutation addPrestamo
 Se agrega un préstamo con los siguientes parámetros obligatorios:
 * fecha_prestamo: Date
 * Fecha de devolución (Generada automáticamente)
@@ -783,7 +913,7 @@ Se agrega un préstamo con los siguientes parámetros obligatorios:
 * bibliotecario: String! $\rightarrow$ ID del bibliotecario que gestiona el préstamo
 Al agregar un préstamo, se agrega la referencia del préstamo a Usuario y Bibliotecario (como listas de Préstamos), además, se agrega la referencia a Ejemplar y se actualiza el estado del ejemplar con el valor del lugar donde se lleve el préstamo.
   
-### updatePrestamo
+### Mutation updatePrestamo
 Actualiza el préstamo con el parámetro:
 * fecha_devol_real: Date $\rightarrow$ Fecha de devolución real.
 Por lo tanto, solo se actualiza el prestamo cuando **este es devuelto**.
@@ -791,23 +921,16 @@ Consideraciones:
 * Al actualizar, se libera el ejemplar eliminando la referencia de Préstamo dentro de Ejemplar
 * El estado del ejemplar se actualiza a *Devuelto*. Luego de 30 minutos de entregar el prestamo, se actualiza el ejemplar a **Disponible**, haciendo uso de node-schedule.
 
-### deletePrestamo
+### Mutation deletePrestamo
 Se elimina el préstamo según ID. Se elimina la referencia de Préstamo en Ejemplar, Usuario y Bibliotecario.
 
-### getPrestamos
+### Query getPrestamos
 Se obtiene todos los préstamos
 
-### getPrestamo
+### Query getPrestamo
 Se obtiene el préstamo según su ID
 
-### getComprobante
-Para cumplir con el requisito funcional *"Una vez ingresado el préstamo a domicilio se debe generar un comprobante que indique cada uno de los documentos en préstamo más la fecha/hora de devolución para cada uno de ellos (considerando que no todos los documentos tienen el mismo plazo de préstamo)."* se consideró lo siguiente:
-* En la interfaz para el bibliotecario se permitirá agregar varios ejemplares a un préstamo
-* De esta forma, cuando el bibliotecario complete el formulario, el controlador generará una misma fecha de préstamo para todos los ejemplares ingresados, fecha que se enviará al backend para cada ejemplar.
-* Asumiremos que la fecha (con milisegundos) será única para cada comprobante.
-* Finalmente, para obtener el comprobante de préstamo, se debe ingresar la fecha para obtener todos los préstamos (por ejemplar) que realizó en dicha fecha.
-
-### getPrestamosVencidos
+### Query getPrestamosVencidos
 Se ingresa un lugar: String para obtener los préstamos vencidos, ya sea en Sala Lectura, Sala Multimedia, Casa, etc, y se retorna los préstamos vencidos en ese momento (fecha actual) en el lugar ingresado. Se retorna los siguientes datos del préstamo:
 * id_prestamo: ID
 * fecha_devolucion: Date
@@ -815,6 +938,43 @@ Se ingresa un lugar: String para obtener los préstamos vencidos, ya sea en Sala
 * duration: Int
 * unit: String
 La unidad será en días si el lugar es en Casa, y en horas si el lugar es en Sala.
+
+### Query getPrestamosByUsuario
+Se ingresa el id del usuario para entregar todos los préstamos que ha pedido.
+
+### Query getPrestamosByBibliotecario
+Se ingresa el id del bibliotecario para entregar todos los préstamos que han sido creados por el bibliotecario.
+
+## Comprobante
+
+### Modelo
+* id: ID!
+* fecha_prestamo: Date!
+* usuario: Usuario!
+* bibliotecario: Bibliotecario!
+* prestamos: [Prestamo]
+### Mutation addComprobante
+Para la creación de comprobantes, se consideró lo siguiente:
+* En la interfaz para el bibliotecario se permitirá agregar varios ejemplares a un préstamo
+* De esta forma, cuando el bibliotecario complete el formulario, el controlador generará una misma fecha de préstamo para todos los ejemplares ingresados, fecha que se enviará al backend para cada ejemplar.
+* Además, antes de crear los préstamos, se creará un comprobante vacío. Al tener el id del comprobante creado, se utilizará como input al crear un préstamo, de esta forma el préstamo se agregará al comprobante corrrespondiente.
+
+Luego, para crear un comprobante, se solicita lo siguiente:
+* fecha_prestamo: Date!
+* usuario: String!
+* bibliotecario: String!
+
+### Mutation deleteComprobante
+En caso de que se necesite eliminar un comprobante, por ejemplo, debido a una transacción incorrecta de creación de préstamos, se puede eliminar un comprobante, para ello solo recibe el id del comprobante y se elimina tanto el comprobante como la referencia en sus préstamos asociados.
+
+### Query getComprobante
+Se ingresa el id del comprobante para mostrar toda su información importante. Esto significa que se hace un populate de todos sus campos, además de populate de ejemplar dentro de préstamos y de libro dentro de ejemplar.
+
+### Query getComprobantesByUsuario
+Se ingresa el id del usuario para entregar todos los comprobantes de préstamo entregados al usuario.
+
+### Query getComprobantesByBibliotecario
+Se ingresa el id del bibliotecario para entregar todos los comprobantes de préstamo que han sido creados por el bibliotecario.
 
 ## Usuarios
 
@@ -834,7 +994,7 @@ La unidad será en días si el lugar es en Casa, y en horas si el lugar es en Sa
 * prestamos: [Prestamo]
 * solicitudes: [Solicitud]
 
-### addUsuario
+### Query addUsuario
 Se agrega un usuario con los siguientes parámetros, donde por defecto no se encuentra activo. Todos los campos son obligatorios a excepción de la ruta de foto de perfil y huella digital.
 * rut: String!
 * nombre: String!
@@ -846,7 +1006,7 @@ Se agrega un usuario con los siguientes parámetros, donde por defecto no se enc
 * foto: String $\rightarrow$ Este campo contiene la ruta donde se encuentra la foto de perfil
 * huella: [Boolean]
 
-### updateUsuario
+### Mutation updateUsuario
 Actualiza un usuario según los siguientes parámetros opcionales:
 * rut: String
 * nombre: String
@@ -859,14 +1019,14 @@ Actualiza un usuario según los siguientes parámetros opcionales:
 * foto: String
 * huella: [Boolean]
 
-### deleteUsuario
+### Mutation deleteUsuario
 Elimina un usuario según su ID. Elimina la referencia del Usuario en Préstamo y Solicitud. 
 **No se aconseja su uso, solo en casos extremos. Para dar de baja un usuario, lo ideal es actualizar su estado de activo.** Esto con la finalidad de no perder la referencia del usuario en caso de que tenga préstamos asociados.
 
-### getUsuario
+### Query getUsuario
 Obtiene un usuario según su ID.
 
-### getUsuarios
+### Query getUsuarios
 Obtiene todos los usuarios del sistema.
 
 ## Bibliotecario
@@ -882,7 +1042,7 @@ Obtiene todos los usuarios del sistema.
 * activo: Boolean! (0 si es que el bibliotecario no esta activo o fue dado de baja, 1 en caso contrario)
 * prestamos: [Prestamo]
 
-### addBibliotecario
+### Mutation addBibliotecario
 Agrega un bibliotecario al sistema con los siguientes parámetros, donde por defecto el bibliotecario se encuentra activo:
 * rut: String!
 * nombre: String!
@@ -891,7 +1051,7 @@ Agrega un bibliotecario al sistema con los siguientes parámetros, donde por def
 * contrasenia: String
 * foto: String
 
-### updateBibliotecario
+### Mutation updateBibliotecario
 Actualiza un bibliotecario según los siguientes parámetros opcionales:
 * rut: String
 * nombre: String
@@ -901,6 +1061,6 @@ Actualiza un bibliotecario según los siguientes parámetros opcionales:
 * foto: String
 * activo: Boolean
 
-### deleteBibliotecario
+### Mutation deleteBibliotecario
 Elimina un bibliotecario por su ID. En caso de tener préstamos asociados, se elimina la referencia de Bibliotecario en Préstamo. 
 **No se aconseja su uso, solo en casos extremos. Para dar de baja un bibliotecario, lo ideal es actualizar su estado de activo.** Esto con la finalidad de no perder la referencia del bibliotecario en caso de que tenga préstamos asociados.
