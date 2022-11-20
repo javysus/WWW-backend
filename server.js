@@ -22,7 +22,7 @@ const Prestamo = require('./models/prestamo');
 const Usuario = require('./models/usuario');
 const Bibliotecario = require('./models/bibliotecario');
 const Comprobante = require('./models/comprobante');
-const usuario = require("./models/usuario");
+const Carrito = require("./models/carrito");
 
 mongoose.connect('mongodb+srv://chocolovers:2605@clusterwww.frnk98m.mongodb.net/bec', {useNewUrlParser: true, useUnifiedTopology: true})
 
@@ -71,6 +71,7 @@ type Solicitud{
     createdAt: Date
     updatedAt: Date
     estado_solicitud: Boolean
+    lugar: String
     libro: Libro!
     ejemplar: Ejemplar!
     usuario: Usuario!
@@ -99,9 +100,14 @@ type Prestamo{
 type Vencido{
     id_prestamo: ID
     fecha_devolucion: Date
+    fecha_prestamo: Date
+    ejemplar: String
     lugar: String
     duration: Int
     unit: String
+    titulo: String
+    autor: String
+    comprobante: String
 }
 
 type Usuario{
@@ -250,7 +256,10 @@ type Query {
     getLibrosCatalogo(titulo: String, autor: String, categoria: String): [Catalogo]
     getEjemplares: [Ejemplar]
     getEjemplar(id: ID!): Ejemplar
+    getEjemplaresByEstado(estado: String): [Ejemplar]
     getSolicitudes: [Solicitud]
+    getSolicitudesByUsuario(usuario: String): [Solicitud]
+    getSolicitudesByBibliotecario(bibliotecario: String): [Solicitud]
     getSolicitud(id: ID!): Solicitud
     getSolicitudEstado(estado_solicitud: Boolean): [Solicitud]
     getPrestamos: [Prestamo]
@@ -399,6 +408,11 @@ const resolvers = {
             return ejemplares;
         },
 
+        async getEjemplaresByEstado(obj, {estado}){
+            const ejemplares = await Ejemplar.find({estado: estado});
+            return ejemplares;
+        },
+
         async getSolicitudes(obj){
             const solicitudes = await Solicitud.find().populate('libro');
             return solicitudes;
@@ -413,7 +427,20 @@ const resolvers = {
             var query = {
                 "estado_solicitud": estado_solicitud
             }
-            const solicitudes = await Solicitud.find(query).sort({createdAt: -1}).populate('libro');
+            const solicitudes = await Solicitud.find(query).sort({createdAt: -1}).populate('libro').populate({path: 'libro', populate: { path: 'ejemplares', match: {
+                estado: 'Disponible'
+              } }});
+            return solicitudes;
+        },
+
+        async getSolicitudesByUsuario(obj, {usuario}){
+            const solicitudes = await Solicitud.find({usuario: usuario}).populate('libro');
+
+            return solicitudes;
+        },
+        async getSolicitudesByBibliotecario(obj, {bibliotecario}){
+            const solicitudes = await Solicitud.find({bibliotecario: bibliotecario}).populate('libro');
+
             return solicitudes;
         },
 
@@ -474,7 +501,7 @@ const resolvers = {
         },
 
         async getPrestamosByBibliotecario(obj, {bibliotecario}){
-            const prestamo = await Prestamo.find({bibliotecario: bibliotecario}).populate('ejemplar').populate('usuario');
+            const prestamo = await Prestamo.find({bibliotecario: bibliotecario}).populate('ejemplar').populate('usuario').populate('comprobante');
             return prestamo;
         },
 
@@ -498,6 +525,18 @@ const resolvers = {
             const prestamos = await Prestamo.aggregate([{
                 "$match": {lugar: lugar, fecha_devolucion: {$lt: date}}
               },
+              {"$lookup": {
+                "from": "ejemplars",
+                "localField": "ejemplar",
+                "foreignField": "_id",
+                "as": "ejemplar"
+            }},
+            {"$lookup": {
+                "from": "libros",
+                "localField": "ejemplar.libro",
+                "foreignField": "_id",
+                "as": "libro"
+            }},
                 {"$project": {
                     id_prestamo: "$_id",
                     duration: /*{"$subtract": [date, "$fecha_devolucion"]}*/ {"$dateDiff":
@@ -508,7 +547,14 @@ const resolvers = {
                     }},
                     lugar: 1,
                     fecha_devolucion: 1,
-                    unit: unidad
+                    fecha_prestamo: 1,
+                    ejemplar: { "$first":
+                        "$ejemplar._id"},
+                    titulo: {"$first": "$libro.titulo"},
+                    autor: {"$first": "$libro.autor"},
+                    unit: unidad,
+                    libro: 1,
+                    comprobante: 1
                 }}])
             console.log(prestamos);
             return prestamos; //Para ver el contacto del usuario
@@ -662,7 +708,7 @@ const resolvers = {
             }
 
             if(ejemplarFind !== null && usuarioFind !== null && bibliotecarioFind !== null && comprobanteFind !== null){
-                const prestamo = new Prestamo({fecha_prestamo: fecha_prestamo, fecha_devolucion: fecha_devolucion, lugar: lugar, ejemplar: ejemplarFind._id, usuario: usuarioFind._id, bibliotecario: bibliotecarioFind._id})
+                const prestamo = new Prestamo({fecha_prestamo: fecha_prestamo, fecha_devolucion: fecha_devolucion, lugar: lugar, ejemplar: ejemplarFind._id, usuario: usuarioFind._id, bibliotecario: bibliotecarioFind._id, comprobante: comprobanteFind._id})
 
                 //Agregar referencia al libro
                 await ejemplarFind.updateOne({prestamo: prestamo._id, estado: lugar});
