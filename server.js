@@ -141,6 +141,19 @@ type Bibliotecario{
     comprobantes: [Comprobante]
 }
 
+type Carrito{
+    id: ID!
+    libros: [Libro]
+    usuario: Usuario
+}
+
+type Validacion{
+    mensaje: String
+    usuario: Boolean!
+    bibliotecario: Boolean!
+    validacion: Boolean!
+}
+
 input BibliotecarioInput{
     rut: String!
     nombre: String!
@@ -246,6 +259,15 @@ input ComprobanteInput{
     bibliotecario: String!
 }
 
+input CarritoInput{
+    usuario: String!
+}
+
+input LibroToCarritoInput{
+    id_carrito: String!
+    libro: String!
+}
+
 type Alert{
     message: String
 }
@@ -274,9 +296,10 @@ type Query {
     getPrestamosVencidos(lugar: String): [Vencido]
     getPrestamosByUsuario(usuario: String): [Prestamo]
     getPrestamosByBibliotecario(bibliotecario: String): [Prestamo]
-    ValidacionUsuario(correo: String, constrasenia: String): Boolean
-    ValidacionBibliotecario(correo: String, constrasenia: String): Boolean
+    ValidacionUsuario(correo: String, contrasenia: String): Validacion
+    ValidacionBibliotecario(correo: String, contrasenia: String): Boolean
     ValidacionRutUsuario(rut: String, huella: [Boolean]): Boolean
+    getCarrito(usuario: String): Carrito
 }
 
 type Mutation {
@@ -300,6 +323,9 @@ type Mutation {
     deleteBibliotecario(id: ID!): Alert
     addComprobante(input: ComprobanteInput): Comprobante
     deleteComprobante(id: ID!): Alert
+    addLibroToCarrito(input: LibroToCarritoInput): Carrito
+    deleteLibroInCarrito(input: LibroToCarritoInput): Alert
+    resetCarrito(id: ID!): Alert
 }`;
 
 const resolvers = {
@@ -560,29 +586,49 @@ const resolvers = {
             return prestamos; //Para ver el contacto del usuario
         },
         async ValidacionUsuario(obj, {correo, contrasenia}){
-            const cuenta = await Usuario.find(correo);
+            const cuenta = await Usuario.findOne({correo: correo});
+            const bibliotecario = await Bibliotecario.findOne({correo: correo});
+            let usuario = false;
+            let usuarioBiblio = false;
+            let validacion = false;
+            let mensaje;
             if (cuenta !== null){
+                usuario = true;
                 if (contrasenia === cuenta.contrasenia){
-                    return True;
+                    mensaje = "Sesión iniciada";
+                    validacion = true;
                 }
                 else{
+                    mensaje = "Contraseña incorrecta";
                     console.log("Contraseña incorrecta.")
-                    return False;
                 }
-            } else{
+            } else if (bibliotecario !== null){
+                usuarioBiblio = true;
+                if (contrasenia === bibliotecario.contrasenia){
+                    mensaje = "Sesión iniciada";
+                    validacion = true;
+                }
+                else{
+                    mensaje = "Contraseña incorrecta";
+                    console.log("Contraseña incorrecta.")
+                    
+                } 
+            }else{
+                mensaje = "No se encontró un usuario con este correo.";
                 console.log("No se encontró un usuario con este correo.")
-                return null;
             }
+
+            return {mensaje: mensaje, usuario: usuario, bibliotecario: usuarioBiblio, validacion: validacion}
         },
         async ValidacionBibliotecario(obj, {correo, contrasenia}){
             const cuenta = await Bibliotecario.find({correo: correo});
             if (cuenta !== null){
                 if (contrasenia === cuenta.contrasenia){
-                    return True;
+                    return true;
                 }
                 else{
                     console.log("Contraseña incorrecta.")
-                    return False;
+                    return false;
                 }
             } else{
                 console.log("No se encontró un bibliotecario con este correo.")
@@ -593,17 +639,21 @@ const resolvers = {
             const cuenta = await Usuario.find({rut: rut});
             if (cuenta !== null){
                 if (huella === cuenta.huella){
-                    return True;
+                    return true;
                 }
                 else{
                     console.log("Vuelva a colocar su huella.")
-                    return False;
+                    return false;
                 }
             } else{
                 console.log("No se encontró un bibliotecario con este rut.")
                 return null;
             }
         },
+        async getCarrito(obj, {id}){
+            const carrito = await Carrito.findById(id).populate('libro');
+            return carrito;
+        }
     },
 
     Mutation: {
@@ -747,6 +797,12 @@ const resolvers = {
             else{
                 const usuario = new Usuario({rut: rut, nombre: nombre, apellido: apellido, direccion: direccion, telefono: telefono, correo: correo, contrasenia: contrasenia, foto: foto, huella: huella, activo: false});
                 await usuario.save();
+
+                const carrito = new Carrito({usuario: usuario._id});
+                await carrito.save();
+
+                await usuario.findByIdAndUpdate(usuario._id, {carrito: carrito._id}, {new: true});
+
                 return usuario;
             }
             
@@ -771,7 +827,45 @@ const resolvers = {
         async addComprobante(obj, {input}){
             const comprobante = new Comprobante(input);
             await comprobante.save();
+
+            let {fecha_prestamo, usuario, bibliotecario} = input;
+            const usuarioFind = await Usuario.findById(usuario);
+
+            usuarioFind.comprobantes.push(comprobante._id);
+            await usuarioFind.save();
+            
             return comprobante
+        },
+
+        async addLibroToCarrito(obj, {input}){
+            let {id_carrito, libro} = input;
+            carritoFind = await Carrito.findById(id_carrito);
+            libroFind = await Libro.findById(libro);
+
+            carritoFind.libros.push(libroFind._id);
+            await carritoFind.save();
+
+            return carritoFind;
+        },
+
+        async deleteLibroInCarrito(obj, {input}){
+            let {id_carrito, libro} = input;
+            carritoFind = await Carrito.findById(id_carrito);
+            libroFind = await Libro.findById(libro);
+
+            carritoFind.libros.pop(libroFind._id);
+            await carritoFind.save();
+
+            return carritoFind;
+        },
+
+        async resetCarrito(obj, {input}){
+            let {id_carrito, libro} = input;
+            carritoFind = await Carrito.findByIdAndUpdate(id_carrito, {libros: null}, {new: true});
+    
+            await carritoFind.save();
+
+            return carritoFind;
         },
 
         async updateLibro(obj, { id, input }){
