@@ -152,6 +152,7 @@ type Validacion{
     usuario: Boolean!
     bibliotecario: Boolean!
     validacion: Boolean!
+    id: ID
 }
 
 input BibliotecarioInput{
@@ -345,7 +346,6 @@ const resolvers = {
         async getLibrosCatalogo(obj, { titulo, autor, categoria}){
             var query = {
             };
-
             if (titulo){
                 query.titulo = {$regex: '.*'+titulo+'.*', $options:'i'};
             }
@@ -592,11 +592,13 @@ const resolvers = {
             let usuarioBiblio = false;
             let validacion = false;
             let mensaje;
+            let id;
             if (cuenta !== null){
                 usuario = true;
                 if (contrasenia === cuenta.contrasenia){
                     mensaje = "Sesión iniciada";
                     validacion = true;
+                    id = cuenta._id;
                 }
                 else{
                     mensaje = "Contraseña incorrecta";
@@ -607,6 +609,7 @@ const resolvers = {
                 if (contrasenia === bibliotecario.contrasenia){
                     mensaje = "Sesión iniciada";
                     validacion = true;
+                    id = bibliotecario._id;
                 }
                 else{
                     mensaje = "Contraseña incorrecta";
@@ -618,7 +621,7 @@ const resolvers = {
                 console.log("No se encontró un usuario con este correo.")
             }
 
-            return {mensaje: mensaje, usuario: usuario, bibliotecario: usuarioBiblio, validacion: validacion}
+            return {mensaje: mensaje, usuario: usuario, bibliotecario: usuarioBiblio, validacion: validacion, id: id}
         },
         async ValidacionBibliotecario(obj, {correo, contrasenia}){
             const cuenta = await Bibliotecario.find({correo: correo});
