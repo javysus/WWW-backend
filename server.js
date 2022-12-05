@@ -23,6 +23,7 @@ const Usuario = require('./models/usuario');
 const Bibliotecario = require('./models/bibliotecario');
 const Comprobante = require('./models/comprobante');
 const Carrito = require("./models/carrito");
+const solicitudCarrito = require("./models/solicitudCarrito");
 
 mongoose.connect('mongodb+srv://chocolovers:2605@clusterwww.frnk98m.mongodb.net/bec', {useNewUrlParser: true, useUnifiedTopology: true})
 
@@ -126,6 +127,7 @@ type Usuario{
     prestamos: [Prestamo]
     solicitudes: [Solicitud]
     comprobantes: [Comprobante]
+    carrito: Carrito
 }
 
 type Bibliotecario{
@@ -141,10 +143,23 @@ type Bibliotecario{
     comprobantes: [Comprobante]
 }
 
+type solicitudCarrito{
+    id: ID!
+    libro: Libro!
+    lugar: String!
+    fecha_reserva: Date!
+    fecha_estimada: Date
+    carrito: Carrito
+    createdAt: Date
+    updatedAt: Date
+}
+
 type Carrito{
     id: ID!
-    libros: [Libro]
+    solicitudes: [solicitudCarrito]
     usuario: Usuario
+    createdAt: Date
+    updatedAt: Date
 }
 
 type Validacion{
@@ -153,6 +168,14 @@ type Validacion{
     bibliotecario: Boolean!
     validacion: Boolean!
     id: ID
+}
+
+input solicitudCarritoInput{
+    libro: String!
+    lugar: String!
+    fecha_reserva: Date!
+    fecha_estimada: Date!
+    carrito: String!
 }
 
 input BibliotecarioInput{
@@ -266,7 +289,8 @@ input CarritoInput{
 
 input LibroToCarritoInput{
     id_carrito: String!
-    libro: String!
+    solicitud: String!
+    usuario: String!
 }
 
 type Alert{
@@ -324,7 +348,7 @@ type Mutation {
     deleteBibliotecario(id: ID!): Alert
     addComprobante(input: ComprobanteInput): Comprobante
     deleteComprobante(id: ID!): Alert
-    addLibroToCarrito(input: LibroToCarritoInput): Carrito
+    addLibroToCarrito(input: solicitudCarritoInput): Carrito
     deleteLibroInCarrito(input: LibroToCarritoInput): Alert
     resetCarrito(id: ID!): Alert
 }`;
@@ -476,7 +500,7 @@ const resolvers = {
         },
 
         async getUsuario(obj, { id }){
-            const usuario = await Usuario.findById(id).populate('prestamos').populate('solicitudes');
+            const usuario = await Usuario.findById(id).populate('prestamos').populate('solicitudes').populate('carrito');
             return usuario;
         },
 
@@ -653,8 +677,9 @@ const resolvers = {
                 return null;
             }
         },
-        async getCarrito(obj, {id}){
-            const carrito = await Carrito.findById(id).populate('libro');
+        async getCarrito(obj, {usuario}){
+            const carrito = await Carrito.findOne({usuario: usuario}).populate('solicitudes').populate({path: 'solicitudes', populate: { path: 'libro'}});
+            console.log(carrito);
             return carrito;
         }
     },
@@ -841,12 +866,20 @@ const resolvers = {
         },
 
         async addLibroToCarrito(obj, {input}){
-            let {id_carrito, libro} = input;
-            carritoFind = await Carrito.findById(id_carrito);
-            libroFind = await Libro.findById(libro);
+            let {carrito, libro, lugar, fecha_reserva, fecha_estimada} = input;
 
-            carritoFind.libros.push(libroFind._id);
+            
+            carritoFind = await Carrito.findById(carrito);
+            libroFind = await Libro.findById(libro);
+            const solicitud = new solicitudCarrito({libro: libroFind._id, carrito: carritoFind._id, lugar:lugar, fecha_reserva: fecha_reserva, fecha_estimada: fecha_estimada});
+            await solicitud.save();
+
+            console.log(solicitud);
+            carritoFind.solicitudes.push(solicitud._id);
             await carritoFind.save();
+
+            libroFind.carritos.push(carritoFind._id);
+            await libroFind.save();
 
             return carritoFind;
         },
