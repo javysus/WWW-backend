@@ -42,6 +42,7 @@ type Libro{
     subtipo: String!
     ejemplares: [Ejemplar]
     solicitudes: [Solicitud]
+    solicitudesCarrito: [solicitudCarrito]
 }
 
 type Ejemplar{
@@ -170,6 +171,11 @@ type Validacion{
     id: ID
 }
 
+type ValidacionRut{
+    validacion: Boolean
+    usuario: ID
+}
+
 input solicitudCarritoInput{
     libro: String!
     lugar: String!
@@ -204,7 +210,7 @@ input UsuarioInput{
     direccion: String!
     telefono: Int!
     correo: String!
-    contrasenia: String!
+    contrasenia: String
     foto: String
     huella: [Boolean]
 }
@@ -257,11 +263,13 @@ input SolicitudInput{
     id_libro: String!
     id_usuario: String!
     fecha_reserva: Date!
+    lugar: String!
 }
 
 input SolicitudActualizar{
     estado_solicitud: Boolean
-    ejemplar: String
+    ejemplar: String!
+    bibliotecario: String!
 }
 
 input PrestamoInput{
@@ -323,7 +331,7 @@ type Query {
     getPrestamosByBibliotecario(bibliotecario: String): [Prestamo]
     ValidacionUsuario(correo: String, contrasenia: String): Validacion
     ValidacionBibliotecario(correo: String, contrasenia: String): Boolean
-    ValidacionRutUsuario(rut: String, huella: [Boolean]): Boolean
+    ValidacionRutUsuario(rut: String, huella: [Boolean]): ValidacionRut
     getCarrito(usuario: String): Carrito
 }
 
@@ -349,7 +357,7 @@ type Mutation {
     addComprobante(input: ComprobanteInput): Comprobante
     deleteComprobante(id: ID!): Alert
     addLibroToCarrito(input: solicitudCarritoInput): Carrito
-    deleteLibroInCarrito(input: LibroToCarritoInput): Alert
+    deleteLibroInCarrito(id: ID!): Alert
     resetCarrito(id: ID!): Alert
 }`;
 
@@ -489,7 +497,7 @@ const resolvers = {
             return solicitudes;
         },
         async getSolicitudesByBibliotecario(obj, {bibliotecario}){
-            const solicitudes = await Solicitud.find({bibliotecario: bibliotecario}).populate('libro');
+            const solicitudes = await Solicitud.find({bibliotecario: bibliotecario}).populate('libro').populate('ejemplar');
 
             return solicitudes;
         },
@@ -536,7 +544,7 @@ const resolvers = {
         },
 
         async getPrestamo(obj, { id }){
-            const prestamo = await Prestamo.findById(id).populate('ejemplar').populate('usuario').populate('bibliotecario');
+            const prestamo = await Prestamo.findById(id).populate('ejemplar').populate('usuario').populate('bibliotecario').populate({ path: 'ejemplar' , populate: {path: 'libro'}});
             return prestamo;
         },
 
@@ -546,7 +554,7 @@ const resolvers = {
         },
 
         async getPrestamosByUsuario(obj, {usuario}){
-            const prestamo = await Prestamo.find({usuario: usuario}).populate('ejemplar').populate('bibliotecario');
+            const prestamo = await Prestamo.find({usuario: usuario}).populate('ejemplar').populate('bibliotecario').populate('comprobante');
             return prestamo;
         },
 
@@ -663,23 +671,35 @@ const resolvers = {
             }
         },
         async ValidacionRutUsuario(obj, {rut, huella}){
-            const cuenta = await Usuario.find({rut: rut});
+            const cuenta = await Usuario.findOne({rut: rut});
+            var validacion = true;
+            
             if (cuenta !== null){
-                if (huella === cuenta.huella){
-                    return true;
+                var usuario = cuenta._id;
+                if (huella.length !== cuenta.huella.length){
+                    validacion = false;
+                    usuario = null;
                 }
-                else{
+
+                for(var i=0;i<huella.length;i++){
+                    if(huella[i] != cuenta.huella[i]){
+                        validacion = false;
+                        usuario = null;
+                    }
+                }
+                if (validacion === false){
                     console.log("Vuelva a colocar su huella.")
-                    return false;
                 }
+                
+                return {validacion: validacion, usuario: usuario};
             } else{
-                console.log("No se encontró un bibliotecario con este rut.")
-                return null;
+                console.log("No se encontró un usuario con este rut.")
+                return {validacion: null, usuario: null};
             }
         },
         async getCarrito(obj, {usuario}){
             const carrito = await Carrito.findOne({usuario: usuario}).populate('solicitudes').populate({path: 'solicitudes', populate: { path: 'libro'}});
-            console.log(carrito);
+            console.log("Carrito", carrito);
             return carrito;
         }
     },
@@ -711,12 +731,12 @@ const resolvers = {
         },
 
         async addSolicitud(obj, {input}){
-            let {id_libro, id_usuario, fecha_reserva} = input;
+            let {id_libro, id_usuario, fecha_reserva, lugar} = input;
             console.log(id_libro);
             let libroFind = await Libro.findById(id_libro);
             let usuarioFind = await Usuario.findById(id_usuario);
             if(libroFind !== null && usuarioFind !== null){
-                const solicitud = new Solicitud({estado_solicitud: false, fecha_reserva: fecha_reserva, libro: libroFind._id, usuario: usuarioFind._id})
+                const solicitud = new Solicitud({estado_solicitud: false, fecha_reserva: fecha_reserva, libro: libroFind._id, usuario: usuarioFind._id, lugar: lugar, bibliotecario: null})
 
                 //Agregar referencia al libro
                 libroFind.solicitudes.push(solicitud._id);
@@ -814,7 +834,8 @@ const resolvers = {
 
         async addUsuario(obj, {input}){
             let {rut, nombre, apellido, direccion, telefono, correo, contrasenia, foto, huella} = input;
-            
+            console.log(rut);
+
             usuario_correo = await Usuario.find({correo: correo});
             usuario_rut = await Usuario.find({rut: rut});
 
@@ -829,10 +850,14 @@ const resolvers = {
                 const carrito = new Carrito({usuario: usuario._id});
                 await carrito.save();
 
-                await usuario.findByIdAndUpdate(usuario._id, {carrito: carrito._id}, {new: true});
+                await Usuario.findByIdAndUpdate(usuario._id, {carrito: carrito._id}, {new: true});
 
+                console.log(usuario);
                 return usuario;
+
+                
             }
+            
             
         },
 
@@ -878,30 +903,37 @@ const resolvers = {
             carritoFind.solicitudes.push(solicitud._id);
             await carritoFind.save();
 
-            libroFind.carritos.push(carritoFind._id);
+            libroFind.solicitudesCarrito.push(carritoFind._id);
             await libroFind.save();
 
             return carritoFind;
         },
 
-        async deleteLibroInCarrito(obj, {input}){
-            let {id_carrito, libro} = input;
-            carritoFind = await Carrito.findById(id_carrito);
-            libroFind = await Libro.findById(libro);
+        async deleteLibroInCarrito(obj, {id}){
+            solicitudCarritoFind = await solicitudCarrito.findById(id);
+            carritoFind = await Carrito.findById(solicitudCarritoFind.carrito);
+            libroFind = await Libro.findById(solicitudCarritoFind.libro);
 
-            carritoFind.libros.pop(libroFind._id);
+            carritoFind.solicitudes.pop(solicitudCarritoFind._id);
             await carritoFind.save();
 
-            return carritoFind;
+            libroFind.solicitudesCarrito.pop(solicitudCarritoFind._id);
+            await libroFind.save();
+
+            await solicitudCarritoFind.deleteOne({_id: solicitudCarritoFind._id});
+            
+            return {
+                message: "Solicitud eliminada de carrito"
+            }
         },
 
-        async resetCarrito(obj, {input}){
-            let {id_carrito, libro} = input;
-            carritoFind = await Carrito.findByIdAndUpdate(id_carrito, {libros: null}, {new: true});
-    
+        async resetCarrito(obj, {id}){
+            carritoFind = await Carrito.findByIdAndUpdate(id, {solicitudes: []}, {new: true});
+            console.log(carritoFind);
             await carritoFind.save();
 
-            return carritoFind;
+            console.log("Carrito reseteado");
+            return {message: "Carrito reseteado"};
         },
 
         async updateLibro(obj, { id, input }){
@@ -915,13 +947,14 @@ const resolvers = {
         },
 
         async updateSolicitud(obj, { id, input}){
-            let {estado_solicitud, ejemplar} = input;
+            let {estado_solicitud, ejemplar, bibliotecario} = input;
 
             const ejemplarFind = await Ejemplar.findById(ejemplar);
 
             if(ejemplarFind !== null){
+                const bibliotecarioFind = await Bibliotecario.findById(bibliotecario);
                 const solicitud = await Solicitud.findByIdAndUpdate(id, {estado_solicitud: estado_solicitud, ejemplar: ejemplarFind._id}, {new: true});
-                await ejemplarFind.updateOne({estado: 'Reservado'});
+                await ejemplarFind.updateOne({estado: 'Reservado', bibliotecario: bibliotecarioFind._id});
 
                 return solicitud;
             } else{

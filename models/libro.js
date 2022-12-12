@@ -11,7 +11,7 @@ const libroSchema = new mongoose.Schema({
     subtipo: String,
     ejemplares: [{type: mongoose.Schema.Types.ObjectId, ref:'Ejemplar'}],
     solicitudes: [{type: mongoose.Schema.Types.ObjectId, ref:'Solicitud'}],
-    carritos: [{type: mongoose.Schema.Types.ObjectId, ref:'Carrito'}]
+    solicitudesCarrito: [{type: mongoose.Schema.Types.ObjectId, ref:'solicitudCarrito'}]
 })
 
 module.exports = mongoose.model('Libro', libroSchema);
